@@ -44,6 +44,15 @@ async function playerMove(row, col) {
     else document.getElementById('status').textContent = '';
 }
 
+async function undoMove() {
+    if (isAiThinking || !gameId) return;
+    const res = await fetch(`/undo?game_id=${gameId}`, { method: 'POST' });
+    if (!res.ok) return;
+    boardState = await res.json();
+    render();
+    document.getElementById('status').textContent = '';
+}
+
 function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -91,6 +100,20 @@ function render() {
     const turn = boardState.current_player === 1 ? '黑棋' : '白棋';
     document.getElementById('turn-indicator').textContent =
         boardState.game_over ? '对局结束' : `轮到${turn}`;
+
+    // 更新胜率条
+    const blackBar = document.getElementById('black-bar');
+    const whiteBar = document.getElementById('white-bar');
+    if (blackBar && whiteBar && boardState.win_rate !== undefined) {
+        const rate = boardState.win_rate;
+        if (boardState.current_player === 1) {
+            blackBar.style.width = (rate * 100) + '%';
+            whiteBar.style.width = ((1 - rate) * 100) + '%';
+        } else {
+            whiteBar.style.width = (rate * 100) + '%';
+            blackBar.style.width = ((1 - rate) * 100) + '%';
+        }
+    }
 }
 
 function showResult() {

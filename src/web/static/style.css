@@ -8,18 +8,43 @@ body {
     padding: 20px;
 }
 h1 { color: #f0c040; }
+
 .scoreboard {
     display: flex;
     gap: 30px;
     font-size: 18px;
     margin-bottom: 15px;
 }
+
+/* 新增：胜率条样式 */
+.win-rate-bar {
+    width: 100%;
+    max-width: 480px;
+    height: 18px;
+    display: flex;
+    border-radius: 9px;
+    overflow: hidden;
+    margin: 10px 0;
+    border: 1px solid #444;
+}
+.black-bar {
+    background: #111;
+    height: 100%;
+    transition: width 0.5s ease;
+}
+.white-bar {
+    background: #fff;
+    height: 100%;
+    transition: width 0.5s ease;
+}
+
 #board {
     background: #2d6a4f;
     border-radius: 8px;
     cursor: pointer;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
 }
+
 .controls { margin-top: 15px; }
 button {
     padding: 10px 25px;
@@ -32,4 +57,14 @@ button {
     font-weight: bold;
 }
 button:hover { background: #ffd966; }
+
 #status { margin-top: 15px; font-size: 16px; color: #f0c040; }
+
+/* 新增：手机自适应 */
+@media (max-width: 600px) {
+    canvas {
+        width: 90vw !important;
+        height: 90vw !important;
+    }
+    h1 { font-size: 24px; }
+}

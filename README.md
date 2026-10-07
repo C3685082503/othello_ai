@@ -9,7 +9,36 @@
 相比于直接调用 API 或框架，本项目手写了所有核心算法，旨在彻底吃透搜索、强化学习、神经网络和工程部署的底层逻辑。
 
 ## 🏗️ 技术架构
+graph TD
+    subgraph 前端展示层
+        User[用户 / 手机浏览器] -->|点击落子| Frontend[前端 Canvas 棋盘]
+    end
 
+    subgraph 后端服务层
+        Frontend <-->|HTTP / JSON| Backend[FastAPI 后端]
+        Backend <-->|保存历史 / 悔棋| GameState[游戏状态管理]
+    end
+
+    subgraph AI 核心引擎
+        Backend -->|1. 调用搜索| MCTS[MCTS 搜索树 + PUCT]
+        MCTS <-->|2. 获取直觉| NN[AlphaZeroNet 64/128 双头网络]
+        MCTS -->|3. 返回最佳走法| Backend
+    end
+
+    subgraph 自我进化训练
+        SelfPlay[自我对弈 Self-Play] -->|生成棋谱数据| Data[(data/ 数据集)]
+        Data -->|采样训练| Evolve[进化训练 Evolution]
+        Evolve -->|评估门控 > 55%| Model[(models/ 模型权重)]
+        Model -->|加载最新权重| NN
+    end
+    
+    style User fill:#f9f,stroke:#333,stroke-width:2px
+    style Frontend fill:#bbf,stroke:#333,stroke-width:2px
+    style Backend fill:#bfb,stroke:#333,stroke-width:2px
+    style MCTS fill:#ffb,stroke:#333,stroke-width:2px
+    style NN fill:#fbb,stroke:#333,stroke-width:2px
+    style SelfPlay fill:#e1d5e7,stroke:#333,stroke-width:2px
+    style Evolve fill:#e1d5e7,stroke:#333,stroke-width:2px
 项目采用标准 src/ 结构进行模块化管理：
 
 ```text
