@@ -79,7 +79,7 @@ othello_ai/
 > **实验结论**：在纯 Python 环境、MCTS 算力仅为 Alpha-Beta 深度5 的 1/50 时，模型依然取得了 12.5% 的胜率。这证明了神经网络直觉在低算力环境下的有效性，同时也暴露了纯 Python 串行搜索的算力瓶颈。
 
 ## 🚀 快速开始
-
+> 💡 **日常运行、公网演示与模型进化的完整指南，请查看：[用户手册](docs/USER_GUIDE.md)**
 ### 1. 环境配置
 pip install -r requirements.txt
 
