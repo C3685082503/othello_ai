@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AlphaZero 黑白棋</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <h1>AlphaZero 黑白棋</h1>
+    <div class="scoreboard">
+        <span>黑棋: <b id="black-score">2</b></span>
+        <span>白棋: <b id="white-score">2</b></span>
+        <span id="turn-indicator">轮到黑棋</span>
+    </div>
+    <canvas id="board" width="480" height="480"></canvas>
+    <div class="controls">
+        <button onclick="newGame()">新对局</button>
+    </div>
+    <p id="status"></p>
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: #1a1a2e;
+    color: #eee;
+    padding: 20px;
+}
+h1 { color: #f0c040; }
+.scoreboard {
+    display: flex;
+    gap: 30px;
+    font-size: 18px;
+    margin-bottom: 15px;
+}
+#board {
+    background: #2d6a4f;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+.controls { margin-top: 15px; }
+button {
+    padding: 10px 25px;
+    font-size: 16px;
+    border: none;
+    border-radius: 5px;
+    background: #f0c040;
+    color: #1a1a2e;
+    cursor: pointer;
+    font-weight: bold;
+}
+button:hover { background: #ffd966; }
+#status { margin-top: 15px; font-size: 16px; color: #f0c040; }
