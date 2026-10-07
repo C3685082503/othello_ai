@@ -46,7 +46,7 @@ if __name__ == "__main__":
     print(">>> 测试：进化后的 MCTS+NN vs Alpha-Beta 深度5", flush=True)
 
     wins, losses, draws = 0, 0, 0
-    n_games = 1  # 先只跑1局！
+    n_games = 200 # 先只跑1局！
 
     mcts_engine = MCTS(c_puct=1.5, num_simulations=200)  # 先降到50次模拟
 
