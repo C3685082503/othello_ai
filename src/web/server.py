@@ -22,7 +22,7 @@ app = FastAPI(title="AlphaZero Othello Web API")
 games = {}
 
 # 2. 初始化 MCTS（内部已加载模型，用于对局）
-mcts_engine = MCTS(c_puct=1.5, num_simulations=50)
+mcts_engine = MCTS(c_puct=0.5, num_simulations=800)
 
 # 3. 单独加载网络，用于胜率评估
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -134,17 +134,17 @@ def _board_state(game_id: str, board: Board):
     black, white = board.score()
     winner = board.winner() if board.is_terminal() else None
 
-    # === 新增：计算胜率 ===
+    # === 优化：只在游戏进行中才调用神经网络评估胜率 ===
     win_rate = 0.5
-    if not board.is_terminal():
+    if not board.is_terminal() and (black + white) > 4:  # 初始是4个棋子，大于4说明玩家已经走过了
         state_tensor = board_to_tensor(board, board.current_player).unsqueeze(0).to(device)
         with torch.no_grad():
             _, value_tensor = value_net(state_tensor)
-            value = value_tensor.item()  # 当前玩家的评估分 [-1, 1]
-        win_rate = (value + 1) / 2  # 映射到 [0, 1]
-    else:
+            value = value_tensor.item()
+        win_rate = (value + 1) / 2
+    elif board.is_terminal():
         win_rate = 1.0 if black > white else (0.0 if black < white else 0.5)
-    # ==================
+    # ================================================
 
     return {
         "game_id": game_id,
