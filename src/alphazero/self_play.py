@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import random
 import os  # === 新增 ===
-from src.game_engine.board import Board, BLACK, WHITE
+from src.game_engine.numba_board import NumbaBoard as Board
 from src.alphazero.encoder import board_to_tensor, move_to_index
 from src.alphazero.mcts import MCTS
 

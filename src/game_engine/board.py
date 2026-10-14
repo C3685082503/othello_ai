@@ -94,8 +94,8 @@ class Board:
     def is_terminal(self):
         if self.game_over:
             return True
-        if not self.legal_moves(BLACK) and not self.legal_moves(WHITE):
-            return True
+        if not self.legal_moves(BLACK) and not self.legal_moves(WHITE):   #
+            return True  #
         return False
 
     def score(self):
@@ -110,7 +110,7 @@ class Board:
         else: return 0
 
     def clone(self):
-        new = Board(self.size)
+        new = Board(self.size)  #
         new.board = [row[:] for row in self.board]
         new.current_player = self.current_player
         new.game_over = self.game_over

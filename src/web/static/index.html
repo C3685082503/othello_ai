@@ -2,31 +2,77 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AlphaZero 黑白棋</title>
+    <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA2NCA2NCc+PHJlY3Qgd2lkdGg9JzY0JyBoZWlnaHQ9JzY0JyByeD0nMTMnIGZpbGw9JyUyMzI1NmI0ZicvPjxjaXJjbGUgY3g9JzI1JyBjeT0nMjUnIHI9JzEzJyBmaWxsPSclMjMxNzE5MWYnIHN0cm9rZT0nJTIzZjJmNGY3JyBzdHJva2Utd2lkdGg9JzIuNScvPjxjaXJjbGUgY3g9JzQwJyBjeT0nNDAnIHI9JzEzJyBmaWxsPSclMjNmNGY1ZjgnIHN0cm9rZT0nJTIzMTcxOTFmJyBzdHJva2Utd2lkdGg9JzIuNScvPjwvc3ZnPg==">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <h1>AlphaZero 黑白棋</h1>
-    <div class="scoreboard">
-        <span>黑棋: <b id="black-score">2</b></span>
-        <span>白棋: <b id="white-score">2</b></span>
-        <span id="turn-indicator">轮到黑棋</span>
-    </div>
+    <main class="app">
+        <!-- 标题区 -->
+        <header class="header">
+            <div class="brand">
+                <span class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 32 32" fill="none">
+                        <rect x="1" y="1" width="30" height="30" rx="7" fill="#256b4f"/>
+                        <circle cx="12.5" cy="12.5" r="6.5" fill="#17191f" stroke="#f2f4f7" stroke-width="1.6"/>
+                        <circle cx="20" cy="20" r="6.5" fill="#f4f5f8" stroke="#17191f" stroke-width="1.6"/>
+                    </svg>
+                </span>
+                <div class="brand-text">
+                    <h1>AlphaZero 黑白棋</h1>
+                    <p class="subtitle">深度强化学习 AI 对弈 · 人类 VS AlphaZero</p>
+                </div>
+            </div>
+        </header>
 
-    <!-- 新增：胜率条 -->
-    <div class="win-rate-bar">
-        <div class="black-bar" id="black-bar"></div>
-        <div class="white-bar" id="white-bar"></div>
-    </div>
+        <!-- 分数面板 + 回合指示 -->
+        <section class="score-panel" aria-label="比分">
+            <div class="player-card is-black" id="black-card">
+                <span class="dot" aria-hidden="true"></span>
+                <span class="p-name">黑方</span>
+                <b class="p-score" id="black-score">2</b>
+            </div>
+            <div class="turn-badge" id="turn-indicator">轮到黑棋</div>
+            <div class="player-card is-white" id="white-card">
+                <span class="dot" aria-hidden="true"></span>
+                <span class="p-name">白方</span>
+                <b class="p-score" id="white-score">2</b>
+            </div>
+        </section>
 
-    <canvas id="board" width="480" height="480"></canvas>
+        <!-- 胜率条 -->
+        <section class="win-rate" aria-label="AI 胜率评估">
+            <div class="bar-track" aria-hidden="true">
+                <div class="bar black" id="black-bar"></div>
+                <div class="bar white" id="white-bar"></div>
+            </div>
+            <div class="rate-caption">
+                <span>当前方 AI 胜率评估</span>
+                <span class="rate-num" id="win-rate-text">50%</span>
+            </div>
+        </section>
 
-    <div class="controls">
-        <button onclick="newGame()">新对局</button>
-        <!-- 新增：悔棋按钮 -->
-        <button onclick="undoMove()" style="background:#aaa; margin-left:10px;">悔棋</button>
-    </div>
-    <p id="status"></p>
+        <!-- 棋盘 -->
+        <div class="board-wrap">
+            <canvas id="board" width="480" height="480"></canvas>
+        </div>
+
+        <!-- 控制区 -->
+        <div class="controls">
+            <button class="btn primary" onclick="newGame()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+                新对局
+            </button>
+            <button class="btn ghost" onclick="undoMove()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-4"/></svg>
+                悔棋
+            </button>
+        </div>
+
+        <p id="status" role="status" aria-live="polite"></p>
+    </main>
+
     <script src="/static/app.js"></script>
 </body>
 </html>

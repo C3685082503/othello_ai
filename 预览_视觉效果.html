@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlphaZero 黑白棋（自检预览）</title>
+    <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA2NCA2NCc+PHJlY3Qgd2lkdGg9JzY0JyBoZWlnaHQ9JzY0JyByeD0nMTMnIGZpbGw9JyUyMzI1NmI0ZicvPjxjaXJjbGUgY3g9JzI1JyBjeT0nMjUnIHI9JzEzJyBmaWxsPSclMjMxNzE5MWYnIHN0cm9rZT0nJTIzZjJmNGY3JyBzdHJva2Utd2lkdGg9JzIuNScvPjxjaXJjbGUgY3g9JzQwJyBjeT0nNDAnIHI9JzEzJyBmaWxsPSclMjNmNGY1ZjgnIHN0cm9rZT0nJTIzMTcxOTFmJyBzdHJva2Utd2lkdGg9JzIuNScvPjwvc3ZnPg==">
+    <style>
+    /* ===== 内联 style.css ===== */
+:root {
+    --bg-top: #0e1320;
+    --bg-bottom: #1a1f33;
+    --panel: rgba(255, 255, 255, 0.045);
+    --panel-strong: rgba(255, 255, 255, 0.07);
+    --border: rgba(255, 255, 255, 0.09);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --text-main: #e8ebf2;
+    --text-mid: #a9b1c2;
+    --text-dim: #7c8498;
+    --black: #17191f;
+    --white: #f4f5f8;
+    --accent: #f2c45c;
+    --accent-soft: rgba(242, 196, 92, 0.14);
+    --board-a: #2f7a5c;
+    --board-b: #256b4f;
+    --board-line: rgba(14, 19, 32, 0.55);
+    --radius: 16px;
+    --radius-sm: 10px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+            "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+    font-family: var(--font);
+    color: var(--text-main);
+    min-height: 100vh;
+    background:
+        radial-gradient(1200px 640px at 50% -10%, rgba(60, 92, 140, 0.22), transparent 60%),
+        radial-gradient(900px 560px at 50% 112%, rgba(47, 122, 92, 0.16), transparent 62%),
+        linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+    background-attachment: fixed;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 16px 48px;
+}
+.app { width: 100%; max-width: 560px; display: flex; flex-direction: column; align-items: center; }
+.header { width: 100%; margin-bottom: 22px; }
+.brand { display: flex; align-items: center; gap: 14px; }
+.brand-mark {
+    flex: 0 0 auto; width: 46px; height: 46px; border-radius: 12px;
+    display: grid; place-items: center;
+    background: linear-gradient(160deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03));
+    border: 1px solid var(--border);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.brand-mark svg { width: 30px; height: 30px; }
+.brand-text h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.5px; color: var(--text-main); }
+.brand-text .subtitle { margin: 3px 0 0; font-size: 12.5px; letter-spacing: 0.3px; color: var(--text-dim); }
+.score-panel { width: 100%; display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: stretch; margin-bottom: 16px; }
+.player-card {
+    position: relative; display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    transition: border-color 0.25s ease, background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+    overflow: hidden;
+}
+.player-card.is-active { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
+.player-card .dot { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%; box-shadow: inset 0 -2px 4px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.3); }
+.player-card.is-black .dot { background: radial-gradient(circle at 32% 30%, #4a4f57, #0a0b0d 78%); }
+.player-card.is-white .dot { background: radial-gradient(circle at 32% 30%, #ffffff, #c4c9d0 82%); }
+.player-card .p-name { font-size: 13px; color: var(--text-mid); }
+.player-card .p-score { margin-left: auto; font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; color: var(--text-main); }
+.turn-badge {
+    align-self: center; padding: 8px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+    letter-spacing: 0.4px; white-space: nowrap; background: var(--panel-strong);
+    border: 1px solid var(--border-strong); color: var(--text-mid); text-align: center;
+}
+.turn-badge.is-black { color: #0c0d10; background: #dfe2ea; border-color: #dfe2ea; }
+.turn-badge.is-white { color: #0c0d10; background: #ffffff; border-color: #ffffff; }
+.turn-badge.is-done   { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+.win-rate { width: 100%; margin-bottom: 18px; }
+.bar-track { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,0.08); border: 1px solid var(--border); }
+.bar-track .bar { height: 100%; transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
+.bar-track .black { background: linear-gradient(180deg, #33363d, #101216); }
+.bar-track .white { background: linear-gradient(180deg, #ffffff, #cfd3db); }
+.rate-caption { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 11.5px; color: var(--text-dim); letter-spacing: 0.3px; }
+.rate-caption .rate-num { font-weight: 600; color: var(--text-mid); font-variant-numeric: tabular-nums; }
+.board-wrap {
+    position: relative; width: 100%; padding: 12px;
+    background: linear-gradient(170deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02) 55%), rgba(20, 26, 42, 0.55);
+    border: 1px solid var(--border-strong); border-radius: var(--radius);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+}
+#board { display: block; width: 100%; height: auto; border-radius: 10px; cursor: pointer; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+.controls { display: flex; gap: 12px; margin-top: 22px; width: 100%; }
+.btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex: 1; padding: 12px 18px;
+    font-size: 15px; font-weight: 600; font-family: inherit; letter-spacing: 0.3px; border-radius: var(--radius-sm);
+    cursor: pointer; border: 1px solid transparent; transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+    user-select: none;
+}
+.btn svg { width: 18px; height: 18px; flex: 0 0 auto; }
+.btn.primary { background: linear-gradient(180deg, #f6cd6e, #e6b34a); color: #201a08; box-shadow: 0 6px 18px rgba(242,196,92,0.28), inset 0 1px 0 rgba(255,255,255,0.5); }
+.btn.primary:hover { box-shadow: 0 8px 24px rgba(242,196,92,0.4), inset 0 1px 0 rgba(255,255,255,0.5); }
+.btn.ghost { background: transparent; color: var(--text-mid); border-color: var(--border-strong); }
+.btn.ghost:hover { color: var(--text-main); background: var(--panel-strong); border-color: var(--border-strong); }
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#status { margin: 18px 0 0; min-height: 20px; font-size: 15px; font-weight: 600; letter-spacing: 0.4px; color: var(--accent); text-align: center; }
+@media (prefers-reduced-motion: reduce) { .bar-track .bar { transition: none; } .player-card { transition: none; } .btn { transition: none; } }
+@media (max-width: 460px) {
+    body { padding: 20px 12px 40px; }
+    .brand-text h1 { font-size: 19px; }
+    .brand-text .subtitle { font-size: 13px; }
+    .brand-mark { width: 40px; height: 40px; border-radius: 10px; }
+    .brand-mark svg { width: 26px; height: 26px; }
+    .score-panel { gap: 8px; }
+    .player-card { flex-direction: column; align-items: center; gap: 4px; padding: 10px 8px; text-align: center; }
+    .player-card .p-name { font-size: 14px; }
+    .player-card .p-score { margin-left: 0; font-size: 22px; }
+    .turn-badge { padding: 8px 8px; font-size: 12px; }
+    .rate-caption { font-size: 12.5px; }
+    .controls { flex-direction: column; }
+    .btn { padding: 12px; }
+}
+    </style>
+</head>
+<body>
+    <main class="app">
+        <header class="header">
+            <div class="brand">
+                <span class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 32 32" fill="none">
+                        <rect x="1" y="1" width="30" height="30" rx="7" fill="#256b4f"/>
+                        <circle cx="12.5" cy="12.5" r="6.5" fill="#17191f" stroke="#f2f4f7" stroke-width="1.6"/>
+                        <circle cx="20" cy="20" r="6.5" fill="#f4f5f8" stroke="#17191f" stroke-width="1.6"/>
+                    </svg>
+                </span>
+                <div class="brand-text">
+                    <h1>AlphaZero 黑白棋</h1>
+                    <p class="subtitle">深度强化学习 AI 对弈 · 人类 VS AlphaZero</p>
+                </div>
+            </div>
+        </header>
+
+        <section class="score-panel" aria-label="比分">
+            <div class="player-card is-black is-active" id="black-card">
+                <span class="dot" aria-hidden="true"></span>
+                <span class="p-name">黑方</span>
+                <b class="p-score" id="black-score">2</b>
+            </div>
+            <div class="turn-badge is-black" id="turn-indicator">轮到黑棋</div>
+            <div class="player-card is-white" id="white-card">
+                <span class="dot" aria-hidden="true"></span>
+                <span class="p-name">白方</span>
+                <b class="p-score" id="white-score">2</b>
+            </div>
+        </section>
+
+        <section class="win-rate" aria-label="AI 胜率评估">
+            <div class="bar-track" aria-hidden="true">
+                <div class="bar black" id="black-bar"></div>
+                <div class="bar white" id="white-bar"></div>
+            </div>
+            <div class="rate-caption">
+                <span>当前方 AI 胜率评估</span>
+                <span class="rate-num" id="win-rate-text">50%</span>
+            </div>
+        </section>
+
+        <div class="board-wrap">
+            <canvas id="board" width="480" height="480"></canvas>
+        </div>
+
+        <div class="controls">
+            <button class="btn primary" onclick="newGame()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+                新对局
+            </button>
+            <button class="btn ghost" onclick="undoMove()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-4"/></svg>
+                悔棋
+            </button>
+        </div>
+
+        <p id="status" role="status" aria-live="polite"></p>
+    </main>
+
+    <script>
+    // ===== 内联 app.js 渲染逻辑（自检用，模拟数据，不访问后端）=====
+    const BOARD_SIZE = 8;
+    const CELL_SIZE = 60;
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d');
+
+    let boardState = null;
+    let isAiThinking = false;
+    let anims = [];
+    let lastBoard = null;
+    let hoverCell = null;
+    let hoverDirty = false;
+
+    function easeOutBack(t) { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
+    function detectNewCells() {
+        const newCells = [];
+        if (lastBoard) {
+            for (let r = 0; r < BOARD_SIZE; r++)
+                for (let c = 0; c < BOARD_SIZE; c++)
+                    if (!lastBoard[r][c] && boardState.board[r][c]) newCells.push([r, c]);
+        }
+        lastBoard = boardState.board.map(row => row.slice());
+        return newCells;
+    }
+    function frame() {
+        let running = false;
+        for (const a of anims) { a.t += 0.11; if (a.t < 1) running = true; }
+        anims = anims.filter(a => a.t < 1);
+        drawBoard();
+        if (running) requestAnimationFrame(frame);
+    }
+    function drawPiece(cx, cy, radius, player) {
+        if (radius <= 0.5) return;
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = radius * 0.3;
+        ctx.shadowOffsetY = radius * 0.1;
+        const grad = ctx.createRadialGradient(cx - radius * 0.32, cy - radius * 0.4, radius * 0.12, cx, cy, radius);
+        if (player === 1) { grad.addColorStop(0, '#575d66'); grad.addColorStop(0.5, '#25282e'); grad.addColorStop(1, '#08090b'); }
+        else { grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.55, '#edf0f4'); grad.addColorStop(1, '#c0c6cf'); }
+        ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.fillStyle = grad; ctx.fill();
+        ctx.restore();
+        ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.lineWidth = Math.max(1, radius * 0.05);
+        ctx.strokeStyle = player === 1 ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.14)';
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(cx - radius * 0.32, cy - radius * 0.42, radius * 0.32, radius * 0.2, -0.6, 0, Math.PI * 2);
+        ctx.fillStyle = player === 1 ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.9)';
+        ctx.fill();
+    }
+    function drawBoard() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (let r = 0; r < BOARD_SIZE; r++)
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                ctx.fillStyle = (r + c) % 2 === 0 ? '#2f7a5c' : '#256b4f';
+                ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                ctx.strokeStyle = 'rgba(10, 16, 26, 0.35)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(c * CELL_SIZE + 0.5, r * CELL_SIZE + 0.5, CELL_SIZE, CELL_SIZE);
+            }
+        if (hoverCell && !boardState.game_over && !isAiThinking) {
+            const [hr, hc] = hoverCell;
+            ctx.fillStyle = 'rgba(242, 196, 92, 0.13)';
+            ctx.fillRect(hc * CELL_SIZE, hr * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+        }
+        for (let r = 0; r < BOARD_SIZE; r++)
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                const piece = boardState.board[r][c];
+                if (piece === 0) continue;
+                const cx = c * CELL_SIZE + CELL_SIZE / 2;
+                const cy = r * CELL_SIZE + CELL_SIZE / 2;
+                const a = anims.find(x => x.row === r && x.col === c);
+                if (a) {
+                    const sx = Math.sin(a.t * Math.PI / 2);
+                    ctx.save();
+                    ctx.globalAlpha = 0.3 + 0.7 * a.t;
+                    ctx.translate(cx, cy);
+                    ctx.scale(sx, 1);
+                    drawPiece(0, 0, CELL_SIZE * 0.4, piece);
+                    ctx.restore();
+                } else drawPiece(cx, cy, CELL_SIZE * 0.4, piece);
+            }
+        if (!boardState.game_over && !isAiThinking) {
+            for (const [r, c] of boardState.legal_moves) {
+                const cx = c * CELL_SIZE + CELL_SIZE / 2;
+                const cy = r * CELL_SIZE + CELL_SIZE / 2;
+                const hovering = hoverCell && hoverCell[0] === r && hoverCell[1] === c;
+                ctx.beginPath(); ctx.arc(cx, cy, CELL_SIZE * (hovering ? 0.2 : 0.15), 0, Math.PI * 2);
+                ctx.strokeStyle = hovering ? 'rgba(242,196,92,0.95)' : 'rgba(242,196,92,0.7)';
+                ctx.lineWidth = hovering ? 2.2 : 1.6;
+                ctx.stroke();
+                ctx.beginPath(); ctx.arc(cx, cy, CELL_SIZE * 0.05, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(242,196,92,0.9)';
+                ctx.fill();
+            }
+        }
+    }
+    function updateDom() {
+        document.getElementById('black-score').textContent = boardState.black_score;
+        document.getElementById('white-score').textContent = boardState.white_score;
+        const blackCard = document.getElementById('black-card');
+        const whiteCard = document.getElementById('white-card');
+        const turn = document.getElementById('turn-indicator');
+        if (boardState.game_over) {
+            blackCard.classList.remove('is-active'); whiteCard.classList.remove('is-active');
+            turn.textContent = '对局结束'; turn.className = 'turn-badge is-done';
+        } else {
+            const isBlackTurn = boardState.current_player === 1;
+            blackCard.classList.toggle('is-active', isBlackTurn);
+            whiteCard.classList.toggle('is-active', !isBlackTurn);
+            turn.textContent = isBlackTurn ? '轮到黑棋' : '轮到白棋';
+            turn.className = 'turn-badge ' + (isBlackTurn ? 'is-black' : 'is-white');
+        }
+        const blackBar = document.getElementById('black-bar');
+        const whiteBar = document.getElementById('white-bar');
+        const rateText = document.getElementById('win-rate-text');
+        if (blackBar && whiteBar && boardState.win_rate !== undefined) {
+            const rate = boardState.win_rate;
+            if (boardState.current_player === 1) { blackBar.style.width = (rate * 100) + '%'; whiteBar.style.width = ((1 - rate) * 100) + '%'; }
+            else { whiteBar.style.width = (rate * 100) + '%'; blackBar.style.width = ((1 - rate) * 100) + '%'; }
+            if (rateText) rateText.textContent = Math.round(rate * 100) + '%';
+        }
+    }
+    function render() {
+        const newCells = detectNewCells();
+        for (const nc of newCells) anims.push({ row: nc[0], col: nc[1], t: 0 });
+        if (newCells.length && !boardState.game_over) requestAnimationFrame(frame);
+        updateDom();
+        drawBoard();
+    }
+    function newGame() { /* noop for preview */ }
+    function undoMove() { /* noop for preview */ }
+
+    // ===== 模拟对局数据（中盘，黑方轮）=====
+    const mockBoard = [
+        [0,1,0,0,0,0,1,0],
+        [0,0,1,0,0,1,0,0],
+        [1,1,1,1,0,1,1,0],
+        [0,0,1,1,2,1,0,1],
+        [0,1,2,2,2,1,0,0],
+        [1,0,1,2,2,0,1,0],
+        [0,0,1,1,1,1,0,0],
+        [0,1,0,0,0,0,1,0]
+    ];
+    boardState = {
+        board: mockBoard,
+        current_player: 1,
+        legal_moves: [[0,0],[0,7],[2,4],[4,6],[5,5],[7,7]],
+        game_over: false,
+        black_score: 20,
+        white_score: 14,
+        winner: null,
+        win_rate: 0.65
+    };
+    render();
+    </script>
+</body>
+</html>

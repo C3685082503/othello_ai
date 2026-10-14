@@ -10,7 +10,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from src.game_engine.board import Board, BLACK, WHITE
+from src.game_engine.numba_board import NumbaBoard as Board
+from src.game_engine.board import BLACK, WHITE
 from src.alphazero.mcts import MCTS
 from src.alphazero.encoder import board_to_tensor
 from src.alphazero.network import AlphaZeroNet
@@ -22,7 +23,7 @@ app = FastAPI(title="AlphaZero Othello Web API")
 games = {}
 
 # 2. 初始化 MCTS（内部已加载模型，用于对局）
-mcts_engine = MCTS(c_puct=0.5, num_simulations=800)
+mcts_engine = MCTS(c_puct=1.5, num_simulations=200)
 
 # 3. 单独加载网络，用于胜率评估
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -148,7 +149,7 @@ def _board_state(game_id: str, board: Board):
 
     return {
         "game_id": game_id,
-        "board": board.board,
+        "board": board.board.tolist(),
         "current_player": board.current_player,
         "legal_moves": board.legal_moves() if not board.is_terminal() else [],
         "game_over": board.is_terminal(),
