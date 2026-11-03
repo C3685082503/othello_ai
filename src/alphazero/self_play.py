@@ -5,6 +5,7 @@ import os  # === 新增 ===
 from src.game_engine.numba_board import NumbaBoard as Board
 from src.alphazero.encoder import board_to_tensor, move_to_index
 from src.alphazero.mcts import MCTS
+from src.paths import SELF_PLAY_CHECKPOINT, SELF_PLAY_DATA
 
 
 def self_play(num_games=500, num_simulations=200, temperature=1.0):
@@ -17,7 +18,7 @@ def self_play(num_games=500, num_simulations=200, temperature=1.0):
     all_values = []
 
     # === 新增：断点续跑逻辑 ===
-    checkpoint_path = 'data/self_play_checkpoint.pt'
+    checkpoint_path = SELF_PLAY_CHECKPOINT
     start_game = 0
     if os.path.exists(checkpoint_path):
         print(f">>> 发现断点存档，正在加载...", flush=True)
@@ -93,7 +94,7 @@ def self_play(num_games=500, num_simulations=200, temperature=1.0):
         'states': torch.stack(all_states),
         'pis': torch.tensor(np.array(all_pis), dtype=torch.float32),
         'values': torch.tensor(all_values, dtype=torch.float32)
-    }, 'data/self_play_data.pt')
+    }, SELF_PLAY_DATA)
 
     # === 新增：全部跑完后，删除断点文件，避免下次误读 ===
     if os.path.exists(checkpoint_path):

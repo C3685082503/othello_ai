@@ -1,6 +1,5 @@
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 import random
 import os
@@ -11,12 +10,13 @@ from src.alphazero import mcts
 import torch
 from src.alphazero.network import AlphaZeroNet
 from src.alphazero.mcts import MCTS
+from src.paths import NEW_MODEL, BASELINE_MODEL
 
 # 替换加载的模型为进化后的模型
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-MODEL_PATH = 'models/alphazero_net_new.pth'
+MODEL_PATH = NEW_MODEL
 if not os.path.exists(MODEL_PATH):
-    MODEL_PATH = 'models/baseline/alphazero_net_baseline.pth'
+    MODEL_PATH = BASELINE_MODEL
     print(f"models/alphazero_net_new.pth not found, falling back to {MODEL_PATH}")
 
 evolved_network = AlphaZeroNet().to(device)

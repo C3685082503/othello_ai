@@ -2,10 +2,19 @@ import torch
 from src.game_engine.board import BLACK, WHITE
 from src.alphazero.encoder import board_to_tensor
 from src.alphazero.network import AlphaZeroNet
+from src.paths import BEST_MODEL
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = AlphaZeroNet().to(device)
-model.load_state_dict(torch.load('models/baseline/alphazero_net_baseline.pth', map_location=device))
+
+# baseline/ 下的是早期 32/64 通道权重，与当前 64/128 网络不兼容，
+# 因此这里只加载最佳模型；缺失时抛出明确错误，而不是静默回退到不兼容的权重。
+if not BEST_MODEL.exists():
+    raise FileNotFoundError(
+        f"缺少最佳模型 {BEST_MODEL}；models/baseline/ 下的权重是旧架构（32/64 通道），"
+        "无法加载到当前 64/128 网络，请先训练生成模型。"
+    )
+model.load_state_dict(torch.load(BEST_MODEL, map_location=device))
 model.eval()
 
 def nn_ai(board, player):

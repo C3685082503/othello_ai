@@ -3,17 +3,18 @@ import torch
 import numpy as np
 import random
 
+from src.paths import BEST_MODEL, BASELINE_MODEL
 from src.alphazero.encoder import board_to_tensor, move_to_index
 from src.alphazero.network import AlphaZeroNet
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 network = AlphaZeroNet().to(device)
 try:
-    network.load_state_dict(torch.load('models/alphazero_net.pth', map_location=device))
+    network.load_state_dict(torch.load(BEST_MODEL, map_location=device))
     print(">>> MCTS 加载当前最佳模型 models/alphazero_net.pth 成功")
 except Exception:
     print(">>> 未找到最佳模型，回退加载 baseline 模型")
-    network.load_state_dict(torch.load('models/baseline/alphazero_net_baseline.pth', map_location=device))
+    network.load_state_dict(torch.load(BASELINE_MODEL, map_location=device))
 network.eval()
 
 

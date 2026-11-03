@@ -1,7 +1,6 @@
 import sys
 import os
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 import uuid
 import torch
@@ -15,6 +14,7 @@ from src.game_engine.board import BLACK, WHITE
 from src.alphazero.mcts import MCTS
 from src.alphazero.encoder import board_to_tensor
 from src.alphazero.network import AlphaZeroNet
+from src.paths import BEST_MODEL
 
 app = FastAPI(title="AlphaZero Othello Web API")
 
@@ -29,7 +29,7 @@ mcts_engine = MCTS(c_puct=1.5, num_simulations=200)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 value_net = AlphaZeroNet().to(device)
 try:
-    value_net.load_state_dict(torch.load('models/alphazero_net.pth', map_location=device))
+    value_net.load_state_dict(torch.load(BEST_MODEL, map_location=device))
     value_net.eval()
     print(">>> 胜率评估网络加载成功")
 except Exception as e:

@@ -1,6 +1,5 @@
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 import torch
 import torch.nn as nn
@@ -11,10 +10,7 @@ from src.game_engine.board import Board, BLACK, WHITE
 from src.alphazero.mcts import MCTS
 import os
 
-BASELINE_MODEL = 'models/baseline/alphazero_net_baseline.pth'
-BEST_MODEL = 'models/alphazero_net.pth'
-NEW_MODEL = 'models/alphazero_net_new.pth'
-SELF_PLAY_DATA = 'data/self_play_data.pt'
+from src.paths import BASELINE_MODEL, BEST_MODEL, NEW_MODEL, SELF_PLAY_DATA
 
 
 def current_best_model_path():
@@ -32,9 +28,9 @@ def train_network(epochs=5):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = AlphaZeroNet().to(device)
 
-    if os.path.exists('models/alphazero_net.pth'):
+    if os.path.exists(BEST_MODEL):
         try:
-            model.load_state_dict(torch.load('models/alphazero_net.pth', map_location=device))
+            model.load_state_dict(torch.load(BEST_MODEL, map_location=device))
             print(">>> 成功加载现有模型，继续训练")
         except RuntimeError as e:
             print(f">>> 模型结构不匹配（可能网络已扩容），从头开始训练！错误信息: {e}")
