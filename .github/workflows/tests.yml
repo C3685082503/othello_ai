@@ -18,12 +18,16 @@ jobs:
         with:
           python-version: "3.11"
 
-      # 测试只覆盖纯 Python 的规则引擎与搜索算法，
-      # 不依赖 torch / numba / GPU，所以安装极快。
       - name: Install pytest
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest
+          python -m pip install -r requirements-dev.txt
+
+      # 规则引擎测试不依赖 torch；encoder/network 测试依赖它。
+      # 这里装 CPU 版（约 200MB），避免动辄 2GB 的 CUDA 轮子。
+      # 若某天去掉这一步，相关测试会通过 importorskip 自动跳过而非报错。
+      - name: Install torch (CPU)
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 
       - name: Run tests
         run: python -m pytest -v
