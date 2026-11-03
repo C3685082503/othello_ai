@@ -1,5 +1,9 @@
 #  AlphaZero 黑白棋 AI
 
+[![tests](https://github.com/C3685082503/othello_ai/actions/workflows/tests.yml/badge.svg)](https://github.com/C3685082503/othello_ai/actions/workflows/tests.yml)
+![Python](https://img.shields.io/badge/python-3.11-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 深度强化学习系统，不依赖任何现成的 MCTS、强化学习库。涵盖：游戏规则引擎、传统博弈 AI、策略/价值双头神经网络、蒙特卡洛树搜索（MCTS）、自我对弈进化闭环。
 
 ## 📖 项目简介
@@ -9,6 +13,8 @@
 相比于直接调用 API 或框架，本项目手写了所有核心算法，旨在彻底吃透搜索、强化学习、神经网络和工程部署的底层逻辑。
 
 ## 🏗️ 技术架构
+
+```mermaid
 graph TD
     subgraph 前端展示层
         User[用户 / 手机浏览器] -->|点击落子| Frontend[前端 Canvas 棋盘]
@@ -39,6 +45,8 @@ graph TD
     style NN fill:#fbb,stroke:#333,stroke-width:2px
     style SelfPlay fill:#e1d5e7,stroke:#333,stroke-width:2px
     style Evolve fill:#e1d5e7,stroke:#333,stroke-width:2px
+```
+
 项目采用标准 src/ 结构进行模块化管理：
 
 ```text
@@ -123,5 +131,11 @@ python src/scripts/play_evolved.py
     ./run.sh web         # 网页版 http://127.0.0.1:8000
 
 **数据与模型**：`data/`（282 MB）和 `models/`（10.8 MB）不入库，可用上面命令重新生成。
+
+## 📄 许可证
+
+本项目基于 [MIT License](LICENSE) 开源。
+
+---
 
 本项目为个人在大一期间的独立探索与实践。
