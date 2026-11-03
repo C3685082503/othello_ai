@@ -1,7 +1,3 @@
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
-
 import pytest
 from src.game_engine.board import Board, BLACK, WHITE, EMPTY
 from src.game_engine.evaluate import evaluate
