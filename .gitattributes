@@ -1,0 +1,5 @@
+# Shell 脚本必须用 LF，否则 Linux/Git Bash 上会报 bad interpreter
+*.sh text eol=lf
+
+# 其余文本文件交给 git 自动判断
+* text=auto
