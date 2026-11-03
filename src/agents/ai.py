@@ -161,5 +161,3 @@ def alpha_beta_ai(board, ai_player, depth=4):
         alpha = max(alpha, best_score)
     print(f"[Alpha-Beta] 深度: {depth}, 搜索节点: {node_count[0]}, 最优分数: {best_score}")
     return best_move
-
-

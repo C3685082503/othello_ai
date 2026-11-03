@@ -1,7 +1,10 @@
-torch
-torchvision
-numpy
-pytest
-fastapi
-uvicorn[standard]
-websockets
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+numpy==2.4.6
+pytest==9.1.1
+fastapi==0.142.2
+uvicorn[standard]==0.54.0
+websockets==17.2
+numba==0.68.0

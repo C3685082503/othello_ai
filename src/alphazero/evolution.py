@@ -9,7 +9,6 @@ from torch.utils.data import TensorDataset, DataLoader
 from src.alphazero.network import AlphaZeroNet
 from src.game_engine.board import Board, BLACK, WHITE
 from src.alphazero.mcts import MCTS
-import random
 import os
 
 BASELINE_MODEL = 'models/baseline/alphazero_net_baseline.pth'

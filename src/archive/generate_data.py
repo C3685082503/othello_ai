@@ -1,6 +1,6 @@
 import torch
 import random
-from src.game_engine.board import Board, BLACK, WHITE
+from src.game_engine.board import Board
 from src.agents.ai import alpha_beta_ai
 from src.alphazero.encoder import board_to_tensor, move_to_index, index_to_move
 

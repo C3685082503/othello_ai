@@ -107,4 +107,21 @@ python src/scripts/play_evolved.py
 - Mastering Chess and Shogi by Self-Play with a General Reinforcement Learning Algorithm (AlphaZero)
 
 ---
+## 环境与运行
+
+**要求**：Python 3.11 + NVIDIA 显卡（在 RTX 5050 / sm_120 上验证，驱动 ≥ 525）
+
+**安装依赖**（必须带 cu128 源，否则 torch 会装成 CPU 版）：
+
+    pip install -r requirements.txt
+
+**运行**：
+
+    ./run.sh test        # 单元测试
+    ./run.sh selfplay    # 自对弈，生成训练数据
+    ./run.sh train       # 进化训练
+    ./run.sh web         # 网页版 http://127.0.0.1:8000
+
+**数据与模型**：`data/`（282 MB）和 `models/`（10.8 MB）不入库，可用上面命令重新生成。
+
 本项目为个人在大一期间的独立探索与实践。

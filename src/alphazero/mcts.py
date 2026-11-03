@@ -24,7 +24,8 @@ class Node:
         self.parent = parent
         self.children = {}
         self.N = 0
-        self.W = 0.0
+        self.W \
+            = 0.0
         self.Q = 0.0
         self.P = prior_p
 
