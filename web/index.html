@@ -85,6 +85,10 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-4"/></svg>
                 悔棋
             </button>
+            <button class="btn ghost" id="btn-rules" type="button" aria-label="查看游戏规则">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a2.9 2.9 0 1 1 4.3 2.6c-.8.5-1.4 1-1.4 2"/><path d="M12 17h.01"/></svg>
+                规则
+            </button>
         </div>
 
         <p id="status" role="status" aria-live="polite"></p>
@@ -98,6 +102,33 @@
             <p class="meta">这个页面需要 JavaScript 才能运行本地推理。</p>
         </noscript>
     </main>
+
+    <!-- 开局规则：每次打开页面时先显示，点「开始对局」或按 Esc 关闭 -->
+    <div class="rules" id="rules" role="dialog" aria-modal="true" aria-labelledby="rules-title" hidden>
+        <div class="rules-card" role="document">
+            <p class="rules-kicker">开局必读</p>
+            <h2 id="rules-title">黑白棋（Othello）规则</h2>
+            <p class="rules-sub">夹住、翻转、占角 —— 30 秒看懂，然后开始。</p>
+
+            <ol class="rules-list">
+                <li><b>目标</b>：棋盘下满，或双方都无子可下时，棋子多的一方获胜。</li>
+                <li><b>落子</b>：你执黑先行。每一手必须夹住至少一枚白子（横、竖、斜都算），被夹住的棋子立刻翻成黑色。</li>
+                <li><b>跳过</b>：一方没有合法落点时自动跳过；双方都没有时对局结束。</li>
+                <li><b>读盘</b>：<span class="legend-dot legal" aria-hidden="true"></span>金色圆圈是你可以落子的位置，<span class="legend-dot last" aria-hidden="true"></span>金色小点是最近一手。</li>
+                <li><b>技巧</b>：四个角最稳；角旁边的 X 位、C 位容易被对手夺角，尽量少下。</li>
+                <li><b>操作</b>：点击棋盘落子；也可以用方向键移动光标、回车确认。「悔棋」会撤回你和 AI 的一整轮。</li>
+            </ol>
+
+            <p class="rules-note">
+                模型和搜索全部在你的浏览器里运行，没有服务器、不联网计算。
+                首次打开需先下载 4.3 MB 权重，之后使用浏览器缓存。
+            </p>
+
+            <div class="rules-actions">
+                <button class="btn primary" id="btn-rules-start" type="button">开始对局</button>
+            </div>
+        </div>
+    </div>
 
     <script src="engine.js"></script>
     <script src="net.js"></script>

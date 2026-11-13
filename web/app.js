@@ -36,7 +36,8 @@
     hover: -1,
     kbCursor: 27,
     kbFocus: false,
-    lastSearch: null
+    lastSearch: null,
+    rulesOpen: false
   };
 
   // ---------- 绘制 ----------
@@ -78,7 +79,7 @@
   }
 
   function humanTurn() {
-    return !state.gameOver && !state.thinking && state.board.currentPlayer === BLACK;
+    return !state.rulesOpen && !state.gameOver && !state.thinking && state.board.currentPlayer === BLACK;
   }
 
   function drawBoard() {
@@ -387,6 +388,25 @@
     document.getElementById('thinking').hidden = true;
   }
 
+  // ---------- 开局规则 ----------
+
+  function showRules() {
+    state.rulesOpen = true;
+    state.hover = -1;
+    document.getElementById('rules').hidden = false;
+    var start = document.getElementById('btn-rules-start');
+    if (start && start.focus) start.focus();
+    scheduleDraw();
+  }
+
+  function hideRules() {
+    if (!state.rulesOpen) return;
+    state.rulesOpen = false;
+    document.getElementById('rules').hidden = true;
+    scheduleDraw();
+    if (canvas && canvas.focus) canvas.focus();
+  }
+
   // ---------- 交互 ----------
 
   function eventToIndex(e) {
@@ -462,6 +482,24 @@
 
     document.getElementById('btn-new').addEventListener('click', newGame);
     document.getElementById('btn-undo').addEventListener('click', undo);
+    document.getElementById('btn-rules').addEventListener('click', showRules);
+    document.getElementById('btn-rules-start').addEventListener('click', hideRules);
+
+    // 点遮罩空白处关闭；规则打开时把焦点圈在弹窗内
+    document.getElementById('rules').addEventListener('click', function (e) {
+      if (e.target === e.currentTarget) hideRules();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (!state.rulesOpen) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        hideRules();
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        var start = document.getElementById('btn-rules-start');
+        if (start && start.focus) start.focus();
+      }
+    });
 
     var chips = document.querySelectorAll('#difficulty-chips .chip');
     for (var i = 0; i < chips.length; i++) {
@@ -513,6 +551,7 @@
       (window.__OTHELLO_INLINE__ ? '单文件离线版' : 'sha256 ' + String(net.meta.sha256).slice(0, 8));
 
     newGame();
+    showRules();
   }
 
   // 供自动化验收脚本使用；不参与游戏逻辑，也不暴露任何外部能力

@@ -155,11 +155,24 @@ async function main() {
 
     // 1. 模型加载
     await waitUntil(
-      "document.getElementById('model-info').textContent.includes('参数')",
-      '模型加载完成'
+      "document.readyState === 'complete' && !!document.getElementById('model-info')",
+      '页面 DOM 就绪'
+    );
+    await waitUntil(
+      "!!document.getElementById('model-info') && document.getElementById('model-info').textContent.includes('参数')",
+      '模型加载完成',
+      90000
     );
     const modelInfo = await evaluate("document.getElementById('model-info').textContent", false);
     record('模型加载', /1,132,737/.test(modelInfo), modelInfo);
+
+    // 1.5 开局规则弹窗：应当先出现，点「开始对局」后关闭
+    const rulesShown = await evaluate("!document.getElementById('rules').hidden", false);
+    record('开局显示规则弹窗', rulesShown, rulesShown ? '规则可见' : '规则未显示');
+    await evaluate("document.getElementById('btn-rules-start').click()", false);
+    await sleep(250);
+    const rulesClosed = await evaluate("document.getElementById('rules').hidden", false);
+    record('「开始对局」关闭规则', rulesClosed === true, rulesClosed ? '已关闭' : '仍显示');
 
     const initial = await evaluate(
       "(() => ({b: document.getElementById('black-score').textContent, w: document.getElementById('white-score').textContent}))()",
@@ -183,8 +196,9 @@ async function main() {
     }
 
     await waitUntil(
-      "document.getElementById('timing').textContent.includes('ms') && window.__OTHELLO__.state.thinking === false",
-      'AI 回应完成'
+      "!!document.getElementById('timing') && document.getElementById('timing').textContent.includes('ms') && window.__OTHELLO__.state.thinking === false",
+      'AI 回应完成',
+      90000
     );
     const afterClick = await evaluate(
       "(() => ({b: +document.getElementById('black-score').textContent, w: +document.getElementById('white-score').textContent, status: document.getElementById('status').textContent, timing: document.getElementById('timing').textContent}))()",
@@ -218,7 +232,17 @@ async function main() {
     );
     record('新对局重置为 2:2', afterNew.b === 2 && afterNew.w === 2, JSON.stringify(afterNew));
 
-    // 5. 窄屏无横向溢出
+    // 5. 规则可再次打开，并在 375px 下检查弹窗布局
+    await evaluate("document.getElementById('btn-rules').click()", false);
+    await sleep(250);
+    const reopened = await evaluate("!document.getElementById('rules').hidden", false);
+    record('「规则」按钮可再次打开', reopened, reopened ? '已打开' : '未打开');
+
+    const outDir = join(root, 'docs');
+    mkdirSync(outDir, { recursive: true });
+    const shotRules = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    writeFileSync(join(outDir, 'rules-screenshot.png'), Buffer.from(shotRules.data, 'base64'));
+
     await cdp.send('Emulation.setDeviceMetricsOverride', {
       width: 375,
       height: 812,
@@ -230,14 +254,24 @@ async function main() {
       '(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }))()',
       false
     );
-    record('375px 无横向溢出', narrow.sw <= narrow.iw + 1, `scrollWidth=${narrow.sw}, innerWidth=${narrow.iw}`);
+    record('375px 规则弹窗无横向溢出', narrow.sw <= narrow.iw + 1, `scrollWidth=${narrow.sw}, innerWidth=${narrow.iw}`);
 
-    // 6. 截图（回到桌面视口）
+    const shotRulesMobile = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    writeFileSync(join(outDir, 'rules-mobile.png'), Buffer.from(shotRulesMobile.data, 'base64'));
+
+    // 6. Esc 关闭，回到棋盘截图
     await cdp.send('Emulation.clearDeviceMetricsOverride');
-    await sleep(400);
+    await sleep(300);
+    await evaluate(
+      "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))",
+      false
+    );
+    await sleep(250);
+    const closedByEsc = await evaluate("document.getElementById('rules').hidden", false);
+    record('Esc 关闭规则', closedByEsc === true, closedByEsc ? '已关闭' : '仍显示');
+
+    await sleep(300);
     const shot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
-    const outDir = join(root, 'docs');
-    mkdirSync(outDir, { recursive: true });
     const shotPath = join(outDir, 'browser-screenshot.png');
     writeFileSync(shotPath, Buffer.from(shot.data, 'base64'));
     record('截图已保存', true, shotPath);
