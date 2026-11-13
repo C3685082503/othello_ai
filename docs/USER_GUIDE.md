@@ -1,4 +1,8 @@
 📦 AlphaZero 项目日常运行与演示手册
+
+> 想直接发链接给同学、或者离线演示？现在有「浏览器版」：模型与搜索全部在前端运行。
+> 见 [部署与分享](DEPLOY.md)（在线版、单文件离线版、GitHub Pages 发布步骤）。
+
 📌 前置准备（确保已安装）
 Python 环境：D:\anaconda3\envs\torch_env\python.exe
 

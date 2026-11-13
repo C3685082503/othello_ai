@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "endianness": "little",
+  "dtype": "float32",
+  "count": 1132737,
+  "bytes": 4530948,
+  "sha256": "c72a681adb3693e0a0ef23788ca6c331569717d73ad2b2f82f1b40dfa8cc81b0",
+  "params": [
+    {
+      "name": "conv1.weight",
+      "shape": [
+        64,
+        3,
+        3,
+        3
+      ],
+      "offset": 0,
+      "size": 1728
+    },
+    {
+      "name": "conv1.bias",
+      "shape": [
+        64
+      ],
+      "offset": 1728,
+      "size": 64
+    },
+    {
+      "name": "conv2.weight",
+      "shape": [
+        128,
+        64,
+        3,
+        3
+      ],
+      "offset": 1792,
+      "size": 73728
+    },
+    {
+      "name": "conv2.bias",
+      "shape": [
+        128
+      ],
+      "offset": 75520,
+      "size": 128
+    },
+    {
+      "name": "fc.weight",
+      "shape": [
+        128,
+        8192
+      ],
+      "offset": 75648,
+      "size": 1048576
+    },
+    {
+      "name": "fc.bias",
+      "shape": [
+        128
+      ],
+      "offset": 1124224,
+      "size": 128
+    },
+    {
+      "name": "policy_head.weight",
+      "shape": [
+        64,
+        128
+      ],
+      "offset": 1124352,
+      "size": 8192
+    },
+    {
+      "name": "policy_head.bias",
+      "shape": [
+        64
+      ],
+      "offset": 1132544,
+      "size": 64
+    },
+    {
+      "name": "value_head.weight",
+      "shape": [
+        1,
+        128
+      ],
+      "offset": 1132608,
+      "size": 128
+    },
+    {
+      "name": "value_head.bias",
+      "shape": [
+        1
+      ],
+      "offset": 1132736,
+      "size": 1
+    }
+  ],
+  "source": "alphazero_net.pth",
+  "model_bytes": 4535269
+}

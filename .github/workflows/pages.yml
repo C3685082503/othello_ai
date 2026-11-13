@@ -1,0 +1,76 @@
+name: pages
+
+# 说明：站点本身是纯静态的（浏览器内推理），所以「构建」只是把 web/ 原样发布；
+# 单文件离线版在这里顺手构建一份，作为可下载产物。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - "tests/js/**"
+      - "tools/**"
+      - "src/scripts/export_web_weights.py"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # 不需要 Python：权重是提交进仓库的 weights.bin，这里只验证
+      # 「规则正确 + JS 前向与 PyTorch 一致 + 一整局能下完」。
+      - name: 规则 / 推理 / 对局测试
+        run: node --test tests/js/engine.test.mjs tests/js/net.test.mjs tests/js/e2e.test.mjs
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 构建单文件离线版
+        run: node tools/build_single.mjs
+
+      - name: 上传离线版（可在 Actions 页面下载）
+        uses: actions/upload-artifact@v4
+        with:
+          name: othello-offline
+          path: dist/othello-offline.html
+          retention-days: 30
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AlphaZero 黑白棋：模型与 MCTS 全部在你的浏览器里运行，无服务器、无网络请求。">
+    <meta name="theme-color" content="#0e1320">
+    <title>AlphaZero 黑白棋 · 浏览器版</title>
+    <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA2NCA2NCc+PHJlY3Qgd2lkdGg9JzY0JyBoZWlnaHQ9JzY0JyByeD0nMTMnIGZpbGw9JyUyMzI1NmI0ZicvPjxjaXJjbGUgY3g9JzI1JyBjeT0nMjUnIHI9JzEzJyBmaWxsPSclMjMxNzE5MWYnIHN0cm9rZT0nJTIzZjJmNGY3JyBzdHJva2Utd2lkdGg9JzIuNScvPjxjaXJjbGUgY3g9JzQwJyBjeT0nNDAnIHI9JzEzJyBmaWxsPSclMjNmNGY1ZjgnIHN0cm9rZT0nJTIzMTcxOTFmJyBzdHJva2Utd2lkdGg9JzIuNScvPjwvc3ZnPg==">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main class="app">
+        <header class="header">
+            <div class="brand">
+                <span class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 32 32" fill="none">
+                        <rect x="1" y="1" width="30" height="30" rx="7" fill="#256b4f"/>
+                        <circle cx="12.5" cy="12.5" r="6.5" fill="#17191f" stroke="#f2f4f7" stroke-width="1.6"/>
+                        <circle cx="20" cy="20" r="6.5" fill="#f4f5f8" stroke="#17191f" stroke-width="1.6"/>
+                    </svg>
+                </span>
+                <div class="brand-text">
+                    <h1>AlphaZero 黑白棋</h1>
+                    <p class="subtitle">神经网络 + MCTS 全在本地浏览器运行 · 无服务器</p>
+                </div>
+            </div>
+        </header>
+
+        <section class="score-panel" aria-label="比分">
+            <div class="player-card is-black" id="black-card">
+                <span class="dot" aria-hidden="true"></span>
+                <span class="p-name">黑方 · 你</span>
+                <b class="p-score" id="black-score">2</b>
+            </div>
+            <div class="turn-badge" id="turn-indicator">轮到黑棋</div>
+            <div class="player-card is-white" id="white-card">
+                <span class="dot" aria-hidden="true"></span>
+                <span class="p-name">白方 · AI</span>
+                <b class="p-score" id="white-score">2</b>
+            </div>
+        </section>
+
+        <section class="win-rate" aria-label="胜率评估">
+            <div class="bar-track" aria-hidden="true">
+                <div class="bar black" id="black-bar" style="width:50%"></div>
+                <div class="bar white" id="white-bar" style="width:50%"></div>
+            </div>
+            <div class="rate-caption">
+                <span>价值网络给出的黑方胜率估计</span>
+                <span class="rate-num" id="win-rate-text">50%</span>
+            </div>
+        </section>
+
+        <div class="board-wrap">
+            <canvas id="board" width="480" height="480" tabindex="0" role="application"
+                    aria-label="黑白棋棋盘，方向键移动光标，回车落子"></canvas>
+            <div class="thinking" id="thinking" hidden>
+                <div class="thinking-box">
+                    <div class="spinner" aria-hidden="true"></div>
+                    <div class="thinking-text" id="thinking-text">AI 思考中</div>
+                    <div class="progress-track" aria-hidden="true">
+                        <div class="progress-bar" id="thinking-progress"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <section class="difficulty" aria-label="难度">
+            <span class="difficulty-label">思考强度</span>
+            <div class="chips" id="difficulty-chips">
+                <button class="chip" data-sims="80" type="button">轻松</button>
+                <button class="chip is-active" data-sims="160" type="button">标准</button>
+                <button class="chip" data-sims="320" type="button">认真</button>
+            </div>
+            <span class="depth-note" id="depth-note">160 次模拟 / 步</span>
+        </section>
+
+        <div class="controls">
+            <button class="btn primary" id="btn-new" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+                新对局
+            </button>
+            <button class="btn ghost" id="btn-undo" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-4"/></svg>
+                悔棋
+            </button>
+        </div>
+
+        <p id="status" role="status" aria-live="polite"></p>
+
+        <footer class="meta">
+            <span id="model-info">正在加载模型…</span>
+            <span id="timing"></span>
+        </footer>
+
+        <noscript>
+            <p class="meta">这个页面需要 JavaScript 才能运行本地推理。</p>
+        </noscript>
+    </main>
+
+    <script src="engine.js"></script>
+    <script src="net.js"></script>
+    <script src="mcts.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

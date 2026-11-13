@@ -1,5 +1,10 @@
 # Shell 脚本必须用 LF，否则 Linux/Git Bash 上会报 bad interpreter
 *.sh text eol=lf
 
+# 权重与图片按二进制处理，避免行尾转换破坏文件
+*.bin binary
+*.png binary
+*.pth binary
+
 # 其余文本文件交给 git 自动判断
 * text=auto
