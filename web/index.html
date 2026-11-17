@@ -33,7 +33,10 @@
                 <span class="p-name">黑方 · 你</span>
                 <b class="p-score" id="black-score">2</b>
             </div>
-            <div class="turn-badge" id="turn-indicator">轮到黑棋</div>
+            <div class="turn-badge" id="turn-indicator">
+                <span class="turn-ring" id="turn-ring" hidden aria-hidden="true"></span>
+                <span id="turn-text">轮到黑棋</span>
+            </div>
             <div class="player-card is-white" id="white-card">
                 <span class="dot" aria-hidden="true"></span>
                 <span class="p-name">白方 · AI</span>
@@ -52,18 +55,9 @@
             </div>
         </section>
 
-        <div class="board-wrap">
+        <div class="board-wrap" id="board-wrap">
             <canvas id="board" width="480" height="480" tabindex="0" role="application"
                     aria-label="黑白棋棋盘，方向键移动光标，回车落子"></canvas>
-            <div class="thinking" id="thinking" hidden>
-                <div class="thinking-box">
-                    <div class="spinner" aria-hidden="true"></div>
-                    <div class="thinking-text" id="thinking-text">AI 思考中</div>
-                    <div class="progress-track" aria-hidden="true">
-                        <div class="progress-bar" id="thinking-progress"></div>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <section class="difficulty" aria-label="难度">
@@ -73,6 +67,7 @@
                 <button class="chip is-active" data-sims="160" type="button">标准</button>
                 <button class="chip" data-sims="320" type="button">认真</button>
             </div>
+            <button class="chip chip-toggle" id="toggle-candidates" type="button" aria-pressed="false">AI 思路</button>
             <span class="depth-note" id="depth-note">160 次模拟 / 步</span>
         </section>
 

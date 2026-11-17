@@ -41,7 +41,12 @@
     kbFocus: false,
     lastSearch: null,
     rulesOpen: false,
-    rulesState: 'loading'
+    rulesState: 'loading',
+    thinkingStarted: 0,
+    thinkingShown: false,
+    thinkingTotal: 0,
+    showCandidates: false,
+    candidates: []
   };
 
   // ---------- 绘制 ----------
@@ -167,6 +172,38 @@
       ctx.strokeRect(kx + 3, ky + 3, CELL - 6, CELL - 6);
       ctx.restore();
     }
+
+    // 可选：显示 AI 正在考虑的前 3 个点
+    if (state.showCandidates && state.thinking && state.candidates.length > 0) {
+      drawCandidates();
+    }
+  }
+
+  function drawCandidates() {
+    for (var i = 0; i < state.candidates.length; i++) {
+      var c = state.candidates[i];
+      var cx = (c.move & 7) * CELL + CELL / 2;
+      var cy = (c.move >> 3) * CELL + CELL / 2;
+      var radius = [27, 21, 16][i] || 14;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(242,196,92,' + (0.10 - i * 0.02) + ')';
+      ctx.fill();
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = 'rgba(242,196,92,' + (0.95 - i * 0.18) + ')';
+      ctx.stroke();
+
+      var label = Math.round(c.share * 100) + '%';
+      ctx.font = 'bold 12px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(8,12,20,.75)';
+      ctx.strokeText(label, cx, cy + radius + 12);
+      ctx.fillStyle = '#f2c45c';
+      ctx.fillText(label, cx, cy + radius + 12);
+    }
   }
 
   function frame() {
@@ -194,21 +231,22 @@
     var blackCard = document.getElementById('black-card');
     var whiteCard = document.getElementById('white-card');
     var turn = document.getElementById('turn-indicator');
+    var turnText = document.getElementById('turn-text');
 
     if (state.gameOver) {
       blackCard.classList.remove('is-active');
       whiteCard.classList.remove('is-active');
-      turn.textContent = '对局结束';
+      turnText.textContent = '对局结束';
       turn.className = 'turn-badge is-done';
     } else {
       var isBlackTurn = state.board.currentPlayer === BLACK;
       blackCard.classList.toggle('is-active', isBlackTurn);
       whiteCard.classList.toggle('is-active', !isBlackTurn);
       if (state.thinking) {
-        turn.textContent = 'AI 思考中';
+        turnText.textContent = 'AI 思考中';
         turn.className = 'turn-badge is-white';
       } else {
-        turn.textContent = isBlackTurn ? '轮到你（黑）' : '轮到白棋';
+        turnText.textContent = isBlackTurn ? '轮到你（黑）' : '轮到白棋';
         turn.className = 'turn-badge ' + (isBlackTurn ? 'is-black' : 'is-white');
       }
     }
@@ -306,7 +344,7 @@
       var myEpoch = state.epoch;
       var player = state.board.currentPlayer;
       state.thinking = true;
-      showThinking(0, state.sims);
+      beginThinking(state.sims);
       render();
 
       var started = performance.now();
@@ -315,11 +353,6 @@
 
       // 残局（空位 ≤ 11）直接穷举到终局，不再依赖估值
       if (solver && state.board.emptyCount() <= ENDGAME_EMPTIES) {
-        document.getElementById('thinking-text').textContent = '残局精算中…';
-        // 求解是同步阻塞的，先让遮罩渲染一帧
-        await new Promise(function (resolve) { setTimeout(resolve, 40); });
-        if (state.epoch !== myEpoch) return;
-
         if (mcts) mcts.resetCache();
         endgameInfo = solver.solve(state.board, player, {
           maxEmpty: ENDGAME_EMPTIES,
@@ -334,13 +367,17 @@
             sims: state.sims,
             yieldEvery: 16,
             reuse: true,
-            onProgress: function (p) { showThinking(p.done, p.total); },
+            onProgress: function (p) {
+              updateThinkingUI(p.done, p.total);
+              if (p.candidates) state.candidates = p.candidates;
+              if (state.showCandidates) scheduleDraw();
+            },
             shouldAbort: function () { return state.epoch !== myEpoch; }
           });
         } catch (err) {
           console.error(err);
           state.thinking = false;
-          hideThinking();
+          clearThinkingUI();
           document.getElementById('status').textContent = '搜索出错：' + err.message;
           render();
           return;
@@ -350,7 +387,7 @@
       if (state.epoch !== myEpoch) return; // 已被「新对局」打断
 
       state.thinking = false;
-      hideThinking();
+      clearThinkingUI();
       if (endgameInfo) {
         state.lastSearch = {
           endgame: true,
@@ -412,25 +449,68 @@
     state.lastSearch = null;
     state.blackRate = 0.5;
     if (mcts) mcts.resetCache();
-    hideThinking();
+    clearThinkingUI();
     document.getElementById('status').textContent = '';
     state.blackRate = evaluateBlackRate();
     render();
   }
 
-  // ---------- 思考遮罩 ----------
+  // ---------- 思考反馈（不遮棋盘） ----------
+  // 0–180ms 不显示，避免残局/快棋闪烁；之后进度进入回合徽章与 AI 卡片。
 
-  function showThinking(done, total) {
-    var box = document.getElementById('thinking');
-    box.hidden = false;
-    var pct = total > 0 ? Math.round((done / total) * 100) : 0;
-    document.getElementById('thinking-progress').style.width = pct + '%';
-    document.getElementById('thinking-text').textContent =
-      done > 0 ? 'AI 思考中 ' + done + ' / ' + total : 'AI 思考中';
+  var THINKING_DELAY = 180;
+
+  function beginThinking(total) {
+    state.thinkingStarted = performance.now();
+    state.thinkingTotal = total || 0;
+    state.thinkingShown = false;
+    state.candidates = [];
+    clearThinkingUI();
   }
 
-  function hideThinking() {
-    document.getElementById('thinking').hidden = true;
+  function updateThinkingUI(done, total) {
+    if (!state.thinkingShown) {
+      if (performance.now() - state.thinkingStarted < THINKING_DELAY) return;
+      state.thinkingShown = true;
+    }
+
+    var pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+
+    var ring = document.getElementById('turn-ring');
+    if (ring) {
+      ring.hidden = false;
+      ring.style.setProperty('--p', (pct * 3.6) + 'deg');
+    }
+
+    var text = document.getElementById('turn-text');
+    if (text) text.textContent = 'AI 思考中 ' + pct + '%';
+
+    var card = document.getElementById('white-card');
+    if (card) {
+      card.classList.add('is-thinking');
+      card.style.setProperty('--p', pct + '%');
+    }
+
+    var wrap = document.getElementById('board-wrap');
+    if (wrap) wrap.classList.add('is-thinking');
+  }
+
+  function clearThinkingUI() {
+    state.candidates = [];
+    var ring = document.getElementById('turn-ring');
+    if (ring) {
+      ring.hidden = true;
+      ring.style.removeProperty('--p');
+    }
+
+    var card = document.getElementById('white-card');
+    if (card) {
+      card.classList.remove('is-thinking');
+      card.style.removeProperty('--p');
+    }
+
+    var wrap = document.getElementById('board-wrap');
+    if (wrap) wrap.classList.remove('is-thinking');
   }
 
   // ---------- 开局规则 ----------
@@ -621,6 +701,16 @@
         document.getElementById('depth-note').textContent = state.sims + ' 次模拟 / 步';
       });
     }
+
+    var candidateToggle = document.getElementById('toggle-candidates');
+    if (candidateToggle) {
+      candidateToggle.addEventListener('click', function (e) {
+        state.showCandidates = !state.showCandidates;
+        e.currentTarget.setAttribute('aria-pressed', String(state.showCandidates));
+        e.currentTarget.classList.toggle('is-on', state.showCandidates);
+        scheduleDraw();
+      });
+    }
   }
 
   function render() {
@@ -684,7 +774,8 @@
     playHuman: playHuman,
     aiTurn: aiTurn,
     newGame: newGame,
-    undo: undo
+    undo: undo,
+    render: render
   };
 
   if (document.readyState === 'loading') {

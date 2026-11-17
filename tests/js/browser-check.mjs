@@ -261,11 +261,35 @@ async function main() {
       });
     }
 
+    // 2.5 思考反馈：进度环 + AI 卡片呼吸 + 棋盘描边
+    await waitUntil(
+      "!!document.getElementById('turn-text') && document.getElementById('turn-text').textContent.includes('%')",
+      '思考进度出现',
+      10000
+    );
+    const thinkingState = await evaluate(
+      "(() => ({ text: document.getElementById('turn-text').textContent.trim(), ring: !document.getElementById('turn-ring').hidden, card: document.getElementById('white-card').classList.contains('is-thinking'), board: document.getElementById('board-wrap').classList.contains('is-thinking') }))()",
+      false
+    );
+    record(
+      '思考中显示进度环 + 卡片呼吸 + 棋盘描边',
+      thinkingState.ring && thinkingState.card && thinkingState.board,
+      JSON.stringify(thinkingState)
+    );
+
+    const liveShot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    writeFileSync(join(root, 'docs', 'thinking-live.png'), Buffer.from(liveShot.data, 'base64'));
+
     await waitUntil(
       "!!document.getElementById('timing') && document.getElementById('timing').textContent.includes('ms') && window.__OTHELLO__.state.thinking === false",
       'AI 回应完成',
       90000
     );
+    const settled = await evaluate(
+      "(() => ({ ringHidden: document.getElementById('turn-ring').hidden, card: document.getElementById('white-card').classList.contains('is-thinking'), text: document.getElementById('turn-text').textContent.trim() }))()",
+      false
+    );
+    record('思考结束后视觉复位', settled.ringHidden && !settled.card, JSON.stringify(settled));
     const afterClick = await evaluate(
       "(() => ({b: +document.getElementById('black-score').textContent, w: +document.getElementById('white-score').textContent, status: document.getElementById('status').textContent, timing: document.getElementById('timing').textContent}))()",
       false
@@ -288,6 +312,29 @@ async function main() {
       afterUndo.b + afterUndo.w < afterClick.b + afterClick.w,
       `黑 ${afterUndo.b} : 白 ${afterUndo.w}`
     );
+
+    // 3.5 「AI 思路」开关：打开后应能看到 3 个候选
+    await evaluate("document.getElementById('toggle-candidates').click()", false);
+    const candMove = await evaluate("window.__OTHELLO__.board().legalMoves(1)[0]", false);
+    await evaluate(`window.__OTHELLO__.playHuman(${candMove})`, false);
+    await waitUntil(
+      "document.getElementById('turn-text').textContent.includes('%')",
+      '思路开关下的思考',
+      10000
+    );
+    const candState = await evaluate(
+      "(() => ({ on: document.getElementById('toggle-candidates').getAttribute('aria-pressed'), n: window.__OTHELLO__.state.candidates.length, shares: window.__OTHELLO__.state.candidates.map((c) => Math.round(c.share * 100)) }))()",
+      false
+    );
+    record(
+      '「AI 思路」开关显示 3 个候选',
+      candState.on === 'true' && candState.n === 3,
+      JSON.stringify(candState)
+    );
+    const candShot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    writeFileSync(join(root, 'docs', 'thinking-c-live.png'), Buffer.from(candShot.data, 'base64'));
+    await waitUntil("window.__OTHELLO__.state.thinking === false", '思路测试完成', 60000);
+    await evaluate("document.getElementById('toggle-candidates').click()", false);
 
     // 4. 新对局
     await evaluate("document.getElementById('btn-new').click()", false);
@@ -330,6 +377,32 @@ async function main() {
       await evaluate("document.getElementById('btn-new').click()", false);
       await sleep(300);
     }
+
+    // 4.6 移动端思考态：375px 下进度环不能把布局撑破
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: 375,
+      height: 812,
+      deviceScaleFactor: 2,
+      mobile: true
+    });
+    await sleep(300);
+    const mobileMove = await evaluate("window.__OTHELLO__.board().legalMoves(1)[0]", false);
+    await evaluate(`window.__OTHELLO__.playHuman(${mobileMove})`, false);
+    await waitUntil(
+      "document.getElementById('turn-text').textContent.includes('%')",
+      '移动端思考进度',
+      10000
+    );
+    const mobileThink = await evaluate(
+      "(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth, text: document.getElementById('turn-text').textContent.trim() }))()",
+      false
+    );
+    record('375px 思考态无横向溢出', mobileThink.sw <= mobileThink.iw + 1, JSON.stringify(mobileThink));
+    const shotThinkingMobile = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    writeFileSync(join(root, 'docs', 'thinking-mobile.png'), Buffer.from(shotThinkingMobile.data, 'base64'));
+    await waitUntil("window.__OTHELLO__.state.thinking === false", '移动端 AI 完成', 60000);
+    await cdp.send('Emulation.clearDeviceMetricsOverride');
+    await sleep(300);
 
     // 5. 规则可再次打开，并在 375px 下检查弹窗布局
     await evaluate("document.getElementById('btn-rules').click()", false);

@@ -127,6 +127,23 @@
     return best;
   }
 
+  /** 访问次数最多的前 n 个候选，share 为占根节点访问量的比例 */
+  function topChildren(root, n) {
+    var sum = 0;
+    var i;
+    for (i = 0; i < root.children.length; i++) sum += root.children[i].N;
+    var sorted = root.children.slice().sort(function (a, b) { return b.N - a.N; });
+    var out = [];
+    for (i = 0; i < sorted.length && i < n; i++) {
+      out.push({
+        move: sorted[i].move,
+        visits: sorted[i].N,
+        share: sum > 0 ? sorted[i].N / sum : 0
+      });
+    }
+    return out;
+  }
+
   /**
    * 搜索一步。返回 Promise：
    * { move, visits, value, sims, elapsedMs, root, reachedEnd }
@@ -203,6 +220,7 @@
             total: sims,
             bestMove: bc ? bc.move : null,
             bestVisits: bc ? bc.N : 0,
+            candidates: topChildren(root, 3),
             elapsedMs: Date.now() - started
           });
         }
@@ -220,7 +238,8 @@
       elapsedMs: Date.now() - started,
       root: root,
       reachedEnd: done >= sims,
-      reused: reused
+      reused: reused,
+      candidates: topChildren(root, 3)
     };
   };
 

@@ -167,6 +167,11 @@ body {
 /* ---------- 回合徽章 ---------- */
 .turn-badge {
     align-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: center;
+    min-width: 132px;
     padding: 8px 12px;
     border-radius: 999px;
     font-size: 12.5px;
@@ -178,6 +183,26 @@ body {
     color: var(--text-mid);
     text-align: center;
 }
+
+/* 思考时嵌在徽章里的确定进度环 */
+.turn-ring {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    position: relative;
+    background: conic-gradient(var(--accent) var(--p, 0deg), rgba(0, 0, 0, 0.16) 0);
+}
+
+.turn-ring::after {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    border-radius: 50%;
+    background: #ffffff;
+}
+
+.turn-ring[hidden] { display: none; }
 
 .turn-badge.is-black { color: #0c0d10; background: #dfe2ea; border-color: #dfe2ea; }
 .turn-badge.is-white { color: #0c0d10; background: #ffffff; border-color: #ffffff; }
@@ -311,6 +336,8 @@ body {
     .bar-track .bar { transition: none; }
     .player-card { transition: none; }
     .btn { transition: none; }
+    .player-card.is-thinking,
+    .board-wrap.is-thinking { animation: none; }
 }
 
 /* ---------- 响应式：窄屏 ---------- */
@@ -325,7 +352,7 @@ body {
     .player-card { flex-direction: column; align-items: center; gap: 4px; padding: 10px 8px; text-align: center; }
     .player-card .p-name { font-size: 14px; }
     .player-card .p-score { margin-left: 0; font-size: 22px; }
-    .turn-badge { padding: 8px 8px; font-size: 12px; }
+    .turn-badge { padding: 8px 8px; font-size: 12px; min-width: 120px; }
     .rate-caption { font-size: 12.5px; }
 
     .controls { flex-direction: column; }
@@ -381,6 +408,17 @@ body {
 
 .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+.chip-toggle {
+    flex: 0 0 auto;
+    border: 1px solid var(--border);
+}
+
+.chip-toggle.is-on {
+    color: var(--accent);
+    background: rgba(242, 196, 92, 0.14);
+    box-shadow: inset 0 0 0 1px rgba(242, 196, 92, 0.55);
+}
+
 .depth-note {
     margin-left: auto;
     font-size: 11.5px;
@@ -388,42 +426,7 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
-/* 思考遮罩：绝对定位在棋盘容器内，避免布局跳动 */
-.thinking {
-    position: absolute;
-    inset: 12px;
-    border-radius: 10px;
-    background: rgba(8, 12, 20, 0.55);
-    backdrop-filter: blur(2px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 2;
-}
-
-.thinking[hidden] { display: none; }
-
-.thinking-box { width: min(240px, 80%); text-align: center; }
-
-.spinner {
-    width: 26px;
-    height: 26px;
-    margin: 0 auto 10px;
-    border-radius: 50%;
-    border: 2.5px solid rgba(242, 196, 92, 0.25);
-    border-top-color: var(--accent);
-    animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.thinking-text {
-    font-size: 13px;
-    color: var(--text-main);
-    letter-spacing: 0.3px;
-    font-variant-numeric: tabular-nums;
-}
-
+/* 思考遮罩已移除：改为「AI 卡片呼吸 + 回合徽章进度环」，不遮挡棋盘 */
 .progress-track {
     margin-top: 10px;
     height: 4px;
@@ -437,6 +440,46 @@ body {
     width: 0;
     background: linear-gradient(90deg, #f2c45c, #e6b34a);
     transition: width 0.15s linear;
+}
+
+/* ---------- AI 思考中的视觉反馈（不遮挡棋盘） ---------- */
+
+.player-card.is-thinking {
+    border-color: var(--accent);
+    animation: card-breathe 1.6s ease-in-out infinite;
+}
+
+/* 子元素做底部填充，表示「思考进度」，不影响文字可读性 */
+.player-card.is-thinking::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--p, 0%);
+    background: linear-gradient(180deg, rgba(242, 196, 92, 0), rgba(242, 196, 92, 0.18));
+    pointer-events: none;
+    transition: height 0.15s linear;
+}
+
+@keyframes card-breathe {
+    0%, 100% { box-shadow: 0 0 0 1px var(--accent), 0 0 10px rgba(242, 196, 92, 0.10); }
+    50% { box-shadow: 0 0 0 1px var(--accent), 0 0 22px rgba(242, 196, 92, 0.26); }
+}
+
+.board-wrap.is-thinking {
+    border-color: rgba(242, 196, 92, 0.55);
+    animation: board-breathe 1.8s ease-in-out infinite;
+}
+
+@keyframes board-breathe {
+    0%, 100% {
+        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+    }
+    50% {
+        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45), 0 0 26px rgba(242, 196, 92, 0.18),
+                    0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+    }
 }
 
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -456,10 +499,6 @@ body {
     .difficulty { gap: 8px; }
     .depth-note { width: 100%; margin-left: 0; text-align: right; }
     .meta { flex-direction: column; gap: 4px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .spinner { animation: none; }
 }
 
 /* ---------- 开局规则弹窗 ---------- */

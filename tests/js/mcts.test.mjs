@@ -38,6 +38,12 @@ test('树复用：走完一手再轮到我方时能命中旧树', async () => {
   assert.equal(second.reused, true, '应当命中上一棵搜索树');
   assert.ok(board.legalMoves(board.currentPlayer).includes(second.move), '复用后返回了非法步');
   assert.ok(second.sims > 0);
+
+  assert.equal(second.candidates.length, 3, '应当给出前 3 个候选');
+  const shares = second.candidates.map((c) => c.share);
+  assert.ok(shares[0] >= shares[1] && shares[1] >= shares[2], '候选应按访问占比降序');
+  const sum = shares.reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(sum - 1) < 0.05, `候选占比之和应接近 1，实际 ${sum}`);
 });
 
 test('树复用：局面不匹配时自动退回新建', async () => {
