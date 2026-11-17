@@ -16,7 +16,7 @@ import { dirname, join } from 'node:path';
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
 const { Board } = require(join(here, '..', '..', 'web', 'engine.js'));
-const { Net } = require(join(here, '..', '..', 'web', 'net.js'));
+const { Net, fetchChunked } = require(join(here, '..', '..', 'web', 'net.js'));
 
 const meta = JSON.parse(readFileSync(join(here, '..', '..', 'web', 'weights.json'), 'utf8'));
 const bin = readFileSync(join(here, '..', '..', 'web', 'weights.bin'));
@@ -84,4 +84,143 @@ test('前向耗时（本机粗测）', () => {
   const ms = Number(process.hrtime.bigint() - start) / 1e6 / n;
   console.log(`  [bench] 单次前向 ${ms.toFixed(2)} ms（${(1000 / ms).toFixed(0)} 次/秒）`);
   assert.ok(ms < 200, `前向过慢：${ms} ms/次`);
+});
+
+// ---------- 分块下载 ----------
+
+function makeBytes(n) {
+  const bytes = new Uint8Array(n);
+  for (let i = 0; i < n; i++) bytes[i] = i & 0xff;
+  return bytes;
+}
+
+function makeFetch(bytes, opts = {}) {
+  const calls = [];
+  let failures = opts.failures || 0;
+  const fetchFn = async (url, init = {}) => {
+    const range = init.headers && init.headers.Range;
+    const m = /bytes=(\d+)-(\d+)/.exec(range || '');
+    const start = m ? Number(m[1]) : 0;
+    const end = m ? Number(m[2]) : bytes.length - 1;
+    calls.push([start, end]);
+
+    if (failures > 0) {
+      failures--;
+      throw new Error('模拟网络中断');
+    }
+
+    const whole = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    if (opts.ignoreRange) {
+      return {
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => whole
+      };
+    }
+    const slice = bytes.slice(start, end + 1);
+    return {
+      ok: true,
+      status: start === 0 && end === bytes.length - 1 ? 200 : 206,
+      arrayBuffer: async () => slice.buffer.slice(slice.byteOffset, slice.byteOffset + slice.byteLength)
+    };
+  };
+  return { fetchFn, calls };
+}
+
+test('分块下载：三块拼装正确，进度单调到 100%', async () => {
+  const bytes = makeBytes(1_200_000);
+  const { fetchFn, calls } = makeFetch(bytes);
+  const progress = [];
+
+  const buffer = await fetchChunked(fetchFn, 'weights.bin', bytes.length, {
+    chunkSize: 512 * 1024,
+    concurrency: 3,
+    onProgress: (received, total) => progress.push(received / total)
+  });
+
+  assert.equal(buffer.byteLength, bytes.length);
+  assert.deepEqual(new Uint8Array(buffer), bytes);
+  assert.equal(calls.length, 3);
+  assert.equal(progress[progress.length - 1], 1);
+  for (let i = 1; i < progress.length; i++) {
+    assert.ok(progress[i] >= progress[i - 1], '进度不应回退');
+  }
+});
+
+test('分块下载：单块失败自动重试', async () => {
+  const bytes = makeBytes(700_000);
+  const { fetchFn } = makeFetch(bytes, { failures: 1 });
+
+  const buffer = await fetchChunked(fetchFn, 'weights.bin', bytes.length, {
+    chunkSize: 512 * 1024,
+    concurrency: 1,
+    retries: 2
+  });
+
+  assert.deepEqual(new Uint8Array(buffer), bytes);
+});
+
+test('分块下载：服务器忽略 Range 时退化为整文件', async () => {
+  const bytes = makeBytes(600_000);
+  const { fetchFn } = makeFetch(bytes, { ignoreRange: true });
+
+  const buffer = await fetchChunked(fetchFn, 'weights.bin', bytes.length, {
+    chunkSize: 512 * 1024,
+    concurrency: 2
+  });
+
+  assert.deepEqual(new Uint8Array(buffer), bytes);
+});
+
+test('分块下载：重试耗尽后报错', async () => {
+  const bytes = makeBytes(600_000);
+  const { fetchFn } = makeFetch(bytes, { failures: 99 });
+
+  await assert.rejects(
+    () => fetchChunked(fetchFn, 'weights.bin', bytes.length, {
+      chunkSize: 512 * 1024,
+      concurrency: 1,
+      retries: 2
+    }),
+    /模拟网络中断/
+  );
+});
+
+test('分块下载：流式响应按字节上报进度', async () => {
+  const bytes = makeBytes(300_000);
+  const piece = 16 * 1024;
+
+  const fetchFn = async (url, init = {}) => {
+    const m = /bytes=(\d+)-(\d+)/.exec(init.headers.Range);
+    const start = Number(m[1]);
+    const end = Number(m[2]);
+    const slice = bytes.slice(start, end + 1);
+    let offset = 0;
+    const body = new ReadableStream({
+      pull(controller) {
+        if (offset >= slice.length) {
+          controller.close();
+          return;
+        }
+        const n = Math.min(piece, slice.length - offset);
+        controller.enqueue(slice.slice(offset, offset + n));
+        offset += n;
+      }
+    });
+    return { ok: true, status: 206, body };
+  };
+
+  const progress = [];
+  const buffer = await fetchChunked(fetchFn, 'weights.bin', bytes.length, {
+    chunkSize: 128 * 1024,
+    concurrency: 2,
+    onProgress: (received) => progress.push(received)
+  });
+
+  assert.deepEqual(new Uint8Array(buffer), bytes);
+  assert.ok(progress.length > 4, `进度回调太少：${progress.length}`);
+  for (let i = 1; i < progress.length; i++) {
+    assert.ok(progress[i] >= progress[i - 1], '进度不应回退');
+  }
+  assert.equal(progress[progress.length - 1], bytes.length);
 });

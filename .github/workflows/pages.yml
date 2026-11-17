@@ -36,8 +36,8 @@ jobs:
 
       # 不需要 Python：权重是提交进仓库的 weights.bin，这里只验证
       # 「规则正确 + JS 前向与 PyTorch 一致 + 一整局能下完」。
-      - name: 规则 / 推理 / 对局测试
-        run: node --test tests/js/engine.test.mjs tests/js/net.test.mjs tests/js/e2e.test.mjs
+      - name: 规则 / 推理 / 搜索 / 对局测试
+        run: node --test tests/js/engine.test.mjs tests/js/net.test.mjs tests/js/mcts.test.mjs tests/js/endgame.test.mjs tests/js/e2e.test.mjs
 
   deploy:
     needs: verify

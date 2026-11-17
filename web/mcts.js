@@ -34,7 +34,36 @@
     options = options || {};
     this.net = net;
     this.cPuct = options.cPuct === undefined ? 1.5 : options.cPuct;
+    this.cacheRoot = null; // 上一次搜索的树根，用于下一步复用
   }
+
+  /** 节点与当前局面是否完全一致（64 格 + 行棋方） */
+  function sameBoard(node, board, player) {
+    if (node.player !== player) return false;
+    var a = node.board.cells;
+    var b = board.cells;
+    for (var i = 0; i < 64; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }
+
+  /** 在旧树里找与当前局面匹配的节点（通常深度 2：我方一手 + 对方一手） */
+  function findMatchingNode(root, board, player, maxNodes) {
+    var stack = [root];
+    var seen = 0;
+    while (stack.length > 0 && seen < maxNodes) {
+      var node = stack.pop();
+      seen++;
+      if (sameBoard(node, board, player)) return node;
+      for (var i = 0; i < node.children.length; i++) stack.push(node.children[i]);
+    }
+    return null;
+  }
+
+  MCTS.prototype.resetCache = function () {
+    this.cacheRoot = null;
+  };
 
   /**
    * 扩展一个叶子节点，返回该局面的价值（node.player 视角）。
@@ -113,11 +142,26 @@
 
     var legal = board.legalMoves(player);
     if (legal.length === 0) {
-      return { move: null, visits: 0, value: 0, sims: 0, elapsedMs: 0, root: null, reachedEnd: true };
+      return { move: null, visits: 0, value: 0, sims: 0, elapsedMs: 0, root: null, reachedEnd: true, reused: false };
     }
 
-    var root = new Node(board.clone(), player, null, 1, -1);
-    this.expand(root); // 根节点先扩展，保证 children 存在
+    // 树复用：上一步的树里若存在当前局面，直接把它作为新根，
+    // 省掉重复搜索并保留访问统计（等效模拟数 +20~40%）。
+    var root = null;
+    var reused = false;
+    if (options.reuse && this.cacheRoot) {
+      root = findMatchingNode(this.cacheRoot, board, player, options.reuseLimit || 50000);
+      if (root) {
+        root.parent = null;
+        reused = true;
+      }
+    }
+    if (!root) {
+      root = new Node(board.clone(), player, null, 1, -1);
+      this.expand(root); // 根节点先扩展，保证 children 存在
+    } else if (root.children.length === 0 && !root.board.isTerminal()) {
+      this.expand(root);
+    }
 
     var started = Date.now();
     var done = 0;
@@ -167,6 +211,7 @@
     }
 
     var best = bestChild(root);
+    this.cacheRoot = root;
     return {
       move: best ? best.move : legal[0],
       visits: best ? best.N : 0,
@@ -174,7 +219,8 @@
       sims: done,
       elapsedMs: Date.now() - started,
       root: root,
-      reachedEnd: done >= sims
+      reachedEnd: done >= sims,
+      reused: reused
     };
   };
 

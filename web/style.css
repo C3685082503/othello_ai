@@ -585,6 +585,10 @@ body {
 
 .rules-status[hidden] { display: none; }
 
+.rules-progress { margin-top: 10px; }
+/* display:flex 会盖掉 hidden 属性的 UA 样式，必须显式覆盖 */
+.rules-progress[hidden] { display: none; }
+
 @media (max-width: 460px) {
     .rules { padding: 14px; }
     .rules-card { padding: 20px 18px 18px; border-radius: 16px; }

@@ -21,7 +21,7 @@ const meta = JSON.parse(read('weights.json'));
 const weightsB64 = raw('weights.bin').toString('base64');
 
 const css = read('style.css');
-const scripts = ['engine.js', 'net.js', 'mcts.js', 'app.js'];
+const scripts = ['engine.js', 'endgame.js', 'net.js', 'mcts.js', 'app.js'];
 
 for (const name of scripts) {
   if (read(name).includes('</script')) {
@@ -47,7 +47,7 @@ html = html.replace(
   () => weightsTag + '\n    <script>\n' + read('engine.js') + '\n    </script>'
 );
 
-for (const name of ['net.js', 'mcts.js', 'app.js']) {
+for (const name of ['endgame.js', 'net.js', 'mcts.js', 'app.js']) {
   html = html.replace(
     `<script src="${name}"></script>`,
     () => `<script>\n${read(name)}\n    </script>`

@@ -183,22 +183,175 @@
     throw new Error('当前环境无法解码 base64');
   }
 
+  // ---------- 分块下载 ----------
+  // 国内到 github.io 的链路时快时慢（实测 11 KB/s ~ 147 KB/s，偶尔直接断）。
+  // 单个大文件流一旦中途卡住就要从头再来，所以切成 512 KB：
+  // 单块失败只重试这一块，并用 3 路并发减少整体停顿。
+
+  var CHUNK_SIZE = 512 * 1024;
+  var CHUNK_CONCURRENCY = 3;
+  var CHUNK_RETRIES = 3;
+  var CHUNK_TIMEOUT = 20000;
+
+  function delay(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function fetchWithTimeout(fetchImpl, url, init, ms) {
+    var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, ms);
+    var opts = {};
+    for (var k in init) {
+      if (Object.prototype.hasOwnProperty.call(init, k)) opts[k] = init[k];
+    }
+    if (ctrl) opts.signal = ctrl.signal;
+    return fetchImpl(url, opts).then(
+      function (res) { clearTimeout(timer); return res; },
+      function (err) { clearTimeout(timer); throw err; }
+    );
+  }
+
+  /** 边读响应体边上报字节数；没有流式 body 时退回 arrayBuffer */
+  function readBodyWithProgress(res, onBytes) {
+    if (!res.body || typeof res.body.getReader !== 'function') {
+      return res.arrayBuffer().then(function (buf) {
+        onBytes(buf.byteLength);
+        return buf;
+      });
+    }
+    var reader = res.body.getReader();
+    var chunks = [];
+    var length = 0;
+
+    function pump() {
+      return reader.read().then(function (step) {
+        if (step.done) {
+          var out = new Uint8Array(length);
+          var offset = 0;
+          for (var i = 0; i < chunks.length; i++) {
+            out.set(chunks[i], offset);
+            offset += chunks[i].length;
+          }
+          return out.buffer;
+        }
+        chunks.push(step.value);
+        length += step.value.length;
+        onBytes(step.value.length);
+        return pump();
+      });
+    }
+    return pump();
+  }
+
+  /**
+   * 按 Range 分块下载并拼装。返回 ArrayBuffer。
+   * 兼容服务器不支持 Range（返回 200 + 整个文件）的情况。
+   */
+  function fetchChunked(fetchImpl, url, total, options) {
+    options = options || {};
+    var onProgress = options.onProgress || function () {};
+    var chunkSize = options.chunkSize || CHUNK_SIZE;
+    var concurrency = options.concurrency || CHUNK_CONCURRENCY;
+    var retries = options.retries === undefined ? CHUNK_RETRIES : options.retries;
+    var timeout = options.timeout || CHUNK_TIMEOUT;
+
+    var count = Math.ceil(total / chunkSize);
+    var parts = new Array(count);
+    var nextIndex = 0;
+    var received = 0;
+    var reported = 0;
+    var whole = null;
+
+    // 进度只增不减：分块重试时已上报的字节不会回退
+    function report(value) {
+      var v = Math.min(value, total);
+      if (v > reported) {
+        reported = v;
+        onProgress(v, total);
+      }
+    }
+
+    function worker() {
+      function step() {
+        if (whole) return Promise.resolve();
+        var idx = nextIndex++;
+        if (idx >= count) return Promise.resolve();
+
+        var start = idx * chunkSize;
+        var end = Math.min(start + chunkSize, total) - 1;
+        var attempt = 0;
+
+        function tryOnce() {
+          return fetchWithTimeout(fetchImpl, url, {
+            headers: { Range: 'bytes=' + start + '-' + end }
+          }, timeout).then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            var chunkBytes = 0;
+            return readBodyWithProgress(res, function (n) {
+              chunkBytes += n;
+              report(received + chunkBytes);
+            }).then(function (body) {
+              // 服务器忽略了 Range：拿到的是整个文件
+              if (res.status === 200 && body.byteLength === total) {
+                whole = body;
+                received = total;
+                report(total);
+                return;
+              }
+              if (body.byteLength !== end - start + 1) {
+                throw new Error('分块长度不符：' + body.byteLength);
+              }
+              parts[idx] = new Uint8Array(body);
+              received += body.byteLength;
+              report(received);
+            });
+          }).catch(function (err) {
+            attempt++;
+            if (attempt >= retries) throw err;
+            return delay(250 * attempt).then(tryOnce);
+          });
+        }
+
+        return tryOnce().then(step);
+      }
+      return step();
+    }
+
+    var workers = [];
+    for (var w = 0; w < Math.min(concurrency, count); w++) workers.push(worker());
+
+    return Promise.all(workers).then(function () {
+      if (whole) return whole;
+      var out = new Uint8Array(total);
+      var offset = 0;
+      for (var i = 0; i < count; i++) {
+        if (!parts[i]) throw new Error('下载不完整，请重试');
+        out.set(parts[i], offset);
+        offset += parts[i].length;
+      }
+      if (offset !== total) throw new Error('权重长度不符');
+      return out.buffer;
+    });
+  }
+
   var NetApi = {
     Net: Net,
     decodeBase64: decodeBase64,
-    /** 从 URL 加载（Pages 部署） */
-    load: function (metaUrl, binUrl) {
-      return Promise.all([
-        fetch(metaUrl).then(function (r) {
-          if (!r.ok) throw new Error('加载 ' + metaUrl + ' 失败：' + r.status);
-          return r.json();
-        }),
-        fetch(binUrl).then(function (r) {
-          if (!r.ok) throw new Error('加载 ' + binUrl + ' 失败：' + r.status);
-          return r.arrayBuffer();
-        })
-      ]).then(function (pair) {
-        return new Net(pair[0], pair[1]);
+    fetchChunked: fetchChunked,
+    /** 从 URL 加载（Pages 部署），支持进度回调 */
+    load: function (metaUrl, binUrl, options) {
+      options = options || {};
+      var fetchImpl = options.fetch || (typeof fetch !== 'undefined' ? fetch : null);
+      if (!fetchImpl) return Promise.reject(new Error('当前环境不支持 fetch'));
+
+      return fetchImpl(metaUrl).then(function (r) {
+        if (!r.ok) throw new Error('加载 ' + metaUrl + ' 失败：' + r.status);
+        return r.json();
+      }).then(function (meta) {
+        if (!meta || !meta.bytes) throw new Error('weights.json 缺少 bytes 字段');
+        return fetchChunked(fetchImpl, binUrl, meta.bytes, options).then(function (buf) {
+          return new Net(meta, buf);
+        });
       });
     },
     /** 从内联的 meta + base64 权重构造（单文件离线版） */

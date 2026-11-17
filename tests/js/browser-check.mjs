@@ -157,15 +157,18 @@ async function main() {
     //    用 CDP 把带宽压到 20 KB/s 后强制重载，模拟国内首次访问。
     if (process.env.SLOW === '1') {
       await cdp.send('Network.enable');
+      await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
       await cdp.send('Network.emulateNetworkConditions', {
         offline: false,
         latency: 300,
         downloadThroughput: 20 * 1024,
         uploadThroughput: 20 * 1024
       });
+      await evaluate('window.__SLOW_MARK__ = 1', false);
       await cdp.send('Page.reload', { ignoreCache: true });
+      // 重载是异步的：旧文档仍然 complete，必须等新文档（不再带标记）出现
       await waitUntil(
-        "document.readyState === 'complete' && !!document.getElementById('rules') && !!document.getElementById('model-info')",
+        "typeof window.__SLOW_MARK__ === 'undefined' && document.readyState === 'complete' && !!document.getElementById('rules') && !!document.getElementById('model-info')",
         '慢速重载完成'
       );
       await sleep(600);
@@ -178,6 +181,23 @@ async function main() {
         early.rules && early.aria === 'true' && early.text === '模型加载中…' && /加载/.test(early.model),
         JSON.stringify(early)
       );
+
+      // 等进度文本出现，证明用户能看到「正在下载多少」
+      let progressText = '';
+      try {
+        await waitUntil(
+          "document.getElementById('rules-status').textContent.includes(' / ')",
+          '下载进度出现',
+          20000
+        );
+        progressText = await evaluate("document.getElementById('rules-status').textContent.trim()", false);
+      } catch {
+        progressText = '';
+      }
+      record('慢网下显示下载进度', /\/ 4\.3 MB/.test(progressText), progressText || '未出现');
+
+      // 再等一会儿，让截图里的进度数字更有代表性
+      await sleep(1500);
 
       const slowOut = join(root, 'docs');
       mkdirSync(slowOut, { recursive: true });
@@ -277,6 +297,39 @@ async function main() {
       false
     );
     record('新对局重置为 2:2', afterNew.b === 2 && afterNew.w === 2, JSON.stringify(afterNew));
+
+    // 4.5 残局：把棋盘随机快进到 11 空位，确认走的是精确求解而不是 MCTS
+    const egSetup = await evaluate(
+      `(() => {
+        const api = window.__OTHELLO__;
+        const b = api.board();
+        let seed = 12345;
+        const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+        let guard = 0;
+        while (b.emptyCount() > 11 && !b.isTerminal() && guard++ < 200) {
+          const moves = b.legalMoves();
+          if (!moves.length) { b.currentPlayer = -b.currentPlayer; continue; }
+          b.stepIndex(moves[Math.floor(rnd() * moves.length)]);
+        }
+        if (b.isTerminal()) return { ok: false, reason: 'terminal' };
+        b.currentPlayer = -1;
+        if (b.legalMoves(-1).length === 0) return { ok: false, reason: 'white-has-no-move' };
+        api.state.gameOver = false;
+        api.state.lastSearch = null;
+        return { ok: true, empties: b.emptyCount(), player: b.currentPlayer };
+      })()`,
+      false
+    );
+    record('构造 11 空位残局', egSetup.ok, JSON.stringify(egSetup));
+
+    if (egSetup.ok) {
+      await evaluate('window.__OTHELLO__.aiTurn()');
+      const egTiming = await evaluate("document.getElementById('timing').textContent", false);
+      record('残局切换为精确求解', /残局精算/.test(egTiming), egTiming);
+
+      await evaluate("document.getElementById('btn-new').click()", false);
+      await sleep(300);
+    }
 
     // 5. 规则可再次打开，并在 375px 下检查弹窗布局
     await evaluate("document.getElementById('btn-rules').click()", false);

@@ -16,6 +16,9 @@
   var CELL = 60;
   var BLACK = engine.BLACK;
   var WHITE = engine.WHITE;
+  // 空位 ≤ 11 时改用 alpha-beta 精确求解（本机 10 格 7–36ms，11 格 29–115ms）
+  var ENDGAME_EMPTIES = 11;
+  var solver = window.OthelloEndgame || null;
 
   var canvas = document.getElementById('board');
   var ctx = canvas.getContext('2d');
@@ -226,7 +229,13 @@
 
     var timing = document.getElementById('timing');
     if (state.lastSearch) {
-      timing.textContent = '上次搜索 ' + state.lastSearch.sims + ' 次 · ' + state.lastSearch.ms + ' ms';
+      if (state.lastSearch.endgame) {
+        timing.textContent = '残局精算 ' + state.lastSearch.nodes + ' 节点 · ' +
+          state.lastSearch.ms + ' ms' + (state.lastSearch.complete ? '' : '（未完成）');
+      } else {
+        timing.textContent = '上次搜索 ' + state.lastSearch.sims + ' 次 · ' +
+          state.lastSearch.ms + ' ms' + (state.lastSearch.reused ? ' · 复用树' : '');
+      }
     }
   }
 
@@ -301,28 +310,61 @@
       render();
 
       var started = performance.now();
-      var result;
-      try {
-        result = await mcts.search(state.board, player, {
-          sims: state.sims,
-          yieldEvery: 16,
-          onProgress: function (p) { showThinking(p.done, p.total); },
-          shouldAbort: function () { return state.epoch !== myEpoch; }
+      var result = null;
+      var endgameInfo = null;
+
+      // 残局（空位 ≤ 11）直接穷举到终局，不再依赖估值
+      if (solver && state.board.emptyCount() <= ENDGAME_EMPTIES) {
+        document.getElementById('thinking-text').textContent = '残局精算中…';
+        // 求解是同步阻塞的，先让遮罩渲染一帧
+        await new Promise(function (resolve) { setTimeout(resolve, 40); });
+        if (state.epoch !== myEpoch) return;
+
+        if (mcts) mcts.resetCache();
+        endgameInfo = solver.solve(state.board, player, {
+          maxEmpty: ENDGAME_EMPTIES,
+          budgetMs: 1000
         });
-      } catch (err) {
-        console.error(err);
-        state.thinking = false;
-        hideThinking();
-        document.getElementById('status').textContent = '搜索出错：' + err.message;
-        render();
-        return;
+        if (endgameInfo) result = { move: endgameInfo.move, sims: 0, reused: false };
+      }
+
+      if (!result) {
+        try {
+          result = await mcts.search(state.board, player, {
+            sims: state.sims,
+            yieldEvery: 16,
+            reuse: true,
+            onProgress: function (p) { showThinking(p.done, p.total); },
+            shouldAbort: function () { return state.epoch !== myEpoch; }
+          });
+        } catch (err) {
+          console.error(err);
+          state.thinking = false;
+          hideThinking();
+          document.getElementById('status').textContent = '搜索出错：' + err.message;
+          render();
+          return;
+        }
       }
 
       if (state.epoch !== myEpoch) return; // 已被「新对局」打断
 
       state.thinking = false;
       hideThinking();
-      state.lastSearch = { sims: result.sims, ms: Math.round(performance.now() - started) };
+      if (endgameInfo) {
+        state.lastSearch = {
+          endgame: true,
+          nodes: endgameInfo.nodes,
+          complete: endgameInfo.complete,
+          ms: Math.round(performance.now() - started)
+        };
+      } else {
+        state.lastSearch = {
+          sims: result.sims,
+          reused: !!result.reused,
+          ms: Math.round(performance.now() - started)
+        };
+      }
 
       if (result.move === null || result.move === undefined) {
         render();
@@ -352,6 +394,7 @@
     state.lastMove = -1;
     state.anims = [];
     state.lastSearch = null;
+    if (mcts) mcts.resetCache();
     state.blackRate = evaluateBlackRate();
     document.getElementById('status').textContent = '';
     render();
@@ -368,6 +411,7 @@
     state.hover = -1;
     state.lastSearch = null;
     state.blackRate = 0.5;
+    if (mcts) mcts.resetCache();
     hideThinking();
     document.getElementById('status').textContent = '';
     state.blackRate = evaluateBlackRate();
@@ -443,6 +487,29 @@
         note.textContent = '正在加载模型（4.3 MB，首次打开会慢一些）…';
       }
     }
+
+    var track = document.getElementById('rules-progress');
+    if (track && (kind === 'ready' || kind === 'error')) track.hidden = true;
+  }
+
+  /** 下载进度：分块下载每完成一块回调一次 */
+  function formatBytes(bytes) {
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+    return Math.max(1, Math.round(bytes / 1024)) + ' KB';
+  }
+
+  function updateLoadProgress(received, total) {
+    var pct = total > 0 ? Math.min(100, Math.round((received / total) * 100)) : 0;
+    var note = document.getElementById('rules-status');
+    var bar = document.getElementById('rules-progress-bar');
+    var track = document.getElementById('rules-progress');
+
+    if (note) {
+      note.textContent = '正在下载模型 ' + formatBytes(received) + ' / ' +
+        (total / 1048576).toFixed(1) + ' MB（' + pct + '%）';
+    }
+    if (bar) bar.style.width = pct + '%';
+    if (track) track.hidden = false;
   }
 
   function onStartClick() {
@@ -585,7 +652,9 @@
       if (window.__OTHELLO_INLINE__) {
         net = netApi.fromInline(window.__OTHELLO_INLINE__.meta, window.__OTHELLO_INLINE__.b64);
       } else {
-        net = await netApi.load('weights.json', 'weights.bin');
+        net = await netApi.load('weights.json', 'weights.bin', {
+          onProgress: updateLoadProgress
+        });
       }
     } catch (err) {
       console.error(err);
@@ -613,6 +682,7 @@
     get mcts() { return mcts; },
     board: function () { return state.board; },
     playHuman: playHuman,
+    aiTurn: aiTurn,
     newGame: newGame,
     undo: undo
   };

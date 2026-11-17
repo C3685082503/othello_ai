@@ -127,6 +127,9 @@
             <p class="rules-status" id="rules-status" role="status" aria-live="polite">
                 正在加载模型（4.3 MB，首次打开会慢一些）…
             </p>
+            <div class="progress-track rules-progress" id="rules-progress" hidden aria-hidden="true">
+                <div class="progress-bar" id="rules-progress-bar"></div>
+            </div>
 
             <div class="rules-actions">
                 <button class="btn primary" id="btn-rules-start" type="button" aria-disabled="true">模型加载中…</button>
@@ -135,6 +138,7 @@
     </div>
 
     <script src="engine.js"></script>
+    <script src="endgame.js"></script>
     <script src="net.js"></script>
     <script src="mcts.js"></script>
     <script src="app.js"></script>
