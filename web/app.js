@@ -16,6 +16,9 @@
   var CELL = 60;
   var BLACK = engine.BLACK;
   var WHITE = engine.WHITE;
+  // 翻子动画：单个棋子翻面 300ms，按离落点的距离错开 42ms，最远延迟 210ms
+  var ANIM_DURATION = 300;
+  var ANIM_STEP = 42;
   // 空位 ≤ 11 时改用 alpha-beta 精确求解（本机 10 格 7–36ms，11 格 29–115ms）
   var ENDGAME_EMPTIES = 11;
   var solver = window.OthelloEndgame || null;
@@ -36,6 +39,7 @@
     sims: 160,
     epoch: 0,
     anims: [],
+    animStart: 0,
     hover: -1,
     kbCursor: 27,
     kbFocus: false,
@@ -91,6 +95,57 @@
     return !state.rulesOpen && !state.gameOver && !state.thinking && state.board.currentPlayer === BLACK;
   }
 
+  function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
+  function findAnim(idx) {
+    for (var i = 0; i < state.anims.length; i++) {
+      if (state.anims[i].idx === idx) return state.anims[i];
+    }
+    return null;
+  }
+
+  function animProgress(anim, now) {
+    var p = (now - state.animStart - anim.delay) / ANIM_DURATION;
+    return Math.max(0, Math.min(1, p));
+  }
+
+  /**
+   * 新落子：从 45% 放大并淡入（带一点回弹）
+   * 被翻的棋子：前半段显示旧色、后半段显示新色，用 scaleX 做 180° 翻面
+   */
+  function drawAnimatedPiece(anim, cx, cy, now) {
+    var p = animProgress(anim, now);
+
+    if (p <= 0) {
+      if (anim.from !== 0) drawPiece(cx, cy, CELL * 0.4, anim.from);
+      return;
+    }
+
+    if (anim.from === 0) {
+      // 落子：从 55% 放大，末端有一点轻微过冲
+      var scale = 0.55 + 0.45 * easeOutCubic(p) + 0.05 * Math.sin(Math.PI * p);
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, p * 2.2);
+      ctx.translate(cx, cy);
+      ctx.scale(scale, scale);
+      drawPiece(0, 0, CELL * 0.4, anim.to);
+      ctx.restore();
+      return;
+    }
+
+    // 翻子：中途抬起 2px，scaleX 走 1 → 0 → 1，在 0 附近换色
+    var sx = Math.max(0.02, Math.abs(Math.cos(p * Math.PI)));
+    var color = p < 0.5 ? anim.from : anim.to;
+    var lift = 2 * Math.sin(p * Math.PI);
+    ctx.save();
+    ctx.translate(cx, cy - lift);
+    ctx.scale(sx, 1);
+    drawPiece(0, 0, CELL * 0.4, color);
+    ctx.restore();
+  }
+
   function drawBoard() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -112,23 +167,15 @@
     }
 
     var cells = state.board.cells;
+    var now = performance.now();
     for (var i = 0; i < 64; i++) {
       var piece = cells[i];
       if (piece === 0) continue;
       var cx = (i & 7) * CELL + CELL / 2;
       var cy = (i >> 3) * CELL + CELL / 2;
-      var anim = null;
-      for (var a = 0; a < state.anims.length; a++) {
-        if (state.anims[a].idx === i) { anim = state.anims[a]; break; }
-      }
+      var anim = findAnim(i);
       if (anim) {
-        var sx = Math.sin(anim.t * Math.PI / 2);
-        ctx.save();
-        ctx.globalAlpha = 0.3 + 0.7 * anim.t;
-        ctx.translate(cx, cy);
-        ctx.scale(Math.max(0.02, sx), 1);
-        drawPiece(0, 0, CELL * 0.4, piece);
-        ctx.restore();
+        drawAnimatedPiece(anim, cx, cy, now);
       } else {
         drawPiece(cx, cy, CELL * 0.4, piece);
       }
@@ -207,14 +254,14 @@
   }
 
   function frame() {
+    drawBoard();
+    var now = performance.now();
     var running = false;
     for (var i = 0; i < state.anims.length; i++) {
-      state.anims[i].t += 0.11;
-      if (state.anims[i].t < 1) running = true;
+      if (animProgress(state.anims[i], now) < 1) { running = true; break; }
     }
-    state.anims = state.anims.filter(function (a) { return a.t < 1; });
-    drawBoard();
     if (running) requestAnimationFrame(frame);
+    else state.anims = [];
   }
 
   function scheduleDraw() {
@@ -299,16 +346,30 @@
   function applyMove(idx) {
     var before = state.board.cells.slice();
     state.board.stepIndex(idx);
-    var changed = [];
+
+    var anims = [];
     for (var i = 0; i < 64; i++) {
-      if (before[i] !== state.board.cells[i]) changed.push({ idx: i, t: 0 });
+      var after = state.board.cells[i];
+      if (before[i] === after) continue;
+      var dist = Math.max(
+        Math.abs((i >> 3) - (idx >> 3)),
+        Math.abs((i & 7) - (idx & 7))
+      );
+      anims.push({
+        idx: i,
+        from: before[i],
+        to: after,
+        delay: Math.min(210, dist * ANIM_STEP)
+      });
     }
-    state.anims = changed;
+
+    state.animStart = performance.now();
+    state.anims = anims;
     state.lastMove = idx;
     state.gameOver = state.board.isTerminal();
     state.blackRate = evaluateBlackRate();
     render();
-    if (changed.length) requestAnimationFrame(frame);
+    if (anims.length) requestAnimationFrame(frame);
   }
 
   function evaluateBlackRate() {

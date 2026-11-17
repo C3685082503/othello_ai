@@ -246,6 +246,17 @@ async function main() {
     );
     record('初始局面 2:2', initial.b === '2' && initial.w === '2', JSON.stringify(initial));
 
+    // 1.9 点击蓝光：tap highlight 与默认焦点框都应关闭
+    const canvasStyle = await evaluate(
+      "(() => { const s = getComputedStyle(document.getElementById('board')); return { tap: s.getPropertyValue('-webkit-tap-highlight-color'), outline: s.outlineStyle }; })()",
+      false
+    );
+    record(
+      '棋盘已禁用点击高亮与默认焦点框',
+      (canvasStyle.tap === 'rgba(0, 0, 0, 0)' || canvasStyle.tap === 'transparent') && canvasStyle.outline === 'none',
+      JSON.stringify(canvasStyle)
+    );
+
     // 2. 通过真实鼠标事件落子（验证 canvas 命中与事件绑定）
     const first = await evaluate(
       '(() => { const m = window.__OTHELLO__.board().legalMoves(1); const rect = document.getElementById("board").getBoundingClientRect(); const i = m[0]; const x = rect.left + ((i & 7) + 0.5) * rect.width / 8; const y = rect.top + ((i >> 3) + 0.5) * rect.height / 8; return { i, x, y }; })()',
@@ -260,6 +271,21 @@ async function main() {
         clickCount: 1
       });
     }
+
+    // 2.1 翻子动画：应有旧色→新色的记录，且按距离错峰
+    const animState = await evaluate(
+      "(() => { const a = window.__OTHELLO__.state.anims; return { n: a.length, hasFrom: a.every((x) => 'from' in x && 'to' in x), maxDelay: a.reduce((m, x) => Math.max(m, x.delay), 0), flips: a.filter((x) => x.from !== 0).length }; })()",
+      false
+    );
+    record(
+      '落子后触发分波翻子动画',
+      animState.n > 1 && animState.hasFrom && animState.maxDelay > 0 && animState.flips > 0,
+      JSON.stringify(animState)
+    );
+
+    await sleep(140);
+    const flipShot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    writeFileSync(join(root, 'docs', 'flip-animation.png'), Buffer.from(flipShot.data, 'base64'));
 
     // 2.5 思考反馈：进度环 + AI 卡片呼吸 + 棋盘描边
     await waitUntil(
@@ -285,11 +311,12 @@ async function main() {
       'AI 回应完成',
       90000
     );
+    await sleep(550); // 等 AI 落子的翻子动画播完（最长约 420ms）
     const settled = await evaluate(
-      "(() => ({ ringHidden: document.getElementById('turn-ring').hidden, card: document.getElementById('white-card').classList.contains('is-thinking'), text: document.getElementById('turn-text').textContent.trim() }))()",
+      "(() => ({ ringHidden: document.getElementById('turn-ring').hidden, card: document.getElementById('white-card').classList.contains('is-thinking'), text: document.getElementById('turn-text').textContent.trim(), anims: window.__OTHELLO__.state.anims.length }))()",
       false
     );
-    record('思考结束后视觉复位', settled.ringHidden && !settled.card, JSON.stringify(settled));
+    record('思考结束后视觉复位', settled.ringHidden && !settled.card && settled.anims === 0, JSON.stringify(settled));
     const afterClick = await evaluate(
       "(() => ({b: +document.getElementById('black-score').textContent, w: +document.getElementById('white-score').textContent, status: document.getElementById('status').textContent, timing: document.getElementById('timing').textContent}))()",
       false
