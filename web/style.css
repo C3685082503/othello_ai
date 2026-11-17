@@ -569,6 +569,22 @@ body {
 
 .rules-actions .btn { flex: 1; }
 
+/* 加载中的主按钮：仍然可聚焦（保证弹窗里有可聚焦元素），但点击不生效 */
+.btn[aria-disabled="true"] {
+    opacity: 0.55;
+    cursor: progress;
+    box-shadow: none;
+}
+
+.rules-status {
+    margin: 16px 0 0;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-dim);
+}
+
+.rules-status[hidden] { display: none; }
+
 @media (max-width: 460px) {
     .rules { padding: 14px; }
     .rules-card { padding: 20px 18px 18px; border-radius: 16px; }

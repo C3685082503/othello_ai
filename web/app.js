@@ -37,7 +37,8 @@
     kbCursor: 27,
     kbFocus: false,
     lastSearch: null,
-    rulesOpen: false
+    rulesOpen: false,
+    rulesState: 'loading'
   };
 
   // ---------- 绘制 ----------
@@ -407,6 +408,48 @@
     if (canvas && canvas.focus) canvas.focus();
   }
 
+  /**
+   * 规则弹窗与模型加载是解耦的：规则先出现，按钮随模型状态切换。
+   * loading → 按钮显示「模型加载中…」且点击无效（用 aria-disabled 保留可聚焦性）
+   * ready   → 「开始对局」可点击
+   * error   → 「关闭提示」，让用户能关掉弹窗看错误信息
+   */
+  function setRulesState(kind) {
+    state.rulesState = kind;
+    var btn = document.getElementById('btn-rules-start');
+    var note = document.getElementById('rules-status');
+
+    if (btn) {
+      if (kind === 'ready') {
+        btn.removeAttribute('aria-disabled');
+        btn.textContent = '开始对局';
+      } else if (kind === 'error') {
+        btn.removeAttribute('aria-disabled');
+        btn.textContent = '关闭提示';
+      } else {
+        btn.setAttribute('aria-disabled', 'true');
+        btn.textContent = '模型加载中…';
+      }
+    }
+
+    if (note) {
+      if (kind === 'ready') {
+        note.hidden = true;
+      } else if (kind === 'error') {
+        note.hidden = false;
+        note.textContent = '模型加载失败：网络可能不稳定，可以刷新重试，或改用单文件离线版。';
+      } else {
+        note.hidden = false;
+        note.textContent = '正在加载模型（4.3 MB，首次打开会慢一些）…';
+      }
+    }
+  }
+
+  function onStartClick() {
+    if (state.rulesState === 'loading') return;
+    hideRules();
+  }
+
   // ---------- 交互 ----------
 
   function eventToIndex(e) {
@@ -483,7 +526,7 @@
     document.getElementById('btn-new').addEventListener('click', newGame);
     document.getElementById('btn-undo').addEventListener('click', undo);
     document.getElementById('btn-rules').addEventListener('click', showRules);
-    document.getElementById('btn-rules-start').addEventListener('click', hideRules);
+    document.getElementById('btn-rules-start').addEventListener('click', onStartClick);
 
     // 点遮罩空白处关闭；规则打开时把焦点圈在弹窗内
     document.getElementById('rules').addEventListener('click', function (e) {
@@ -532,6 +575,12 @@
   async function boot() {
     bind();
 
+    // 规则和棋盘都不依赖模型：先摆好、先弹出。
+    // 否则慢网下要等 4.3 MB 权重下完规则才出现，页面看起来像卡死。
+    newGame();
+    showRules();
+    setRulesState('loading');
+
     try {
       if (window.__OTHELLO_INLINE__) {
         net = netApi.fromInline(window.__OTHELLO_INLINE__.meta, window.__OTHELLO_INLINE__.b64);
@@ -541,6 +590,8 @@
     } catch (err) {
       console.error(err);
       showLoadError(err);
+      setRulesState('error');
+      render();
       return;
     }
 
@@ -550,8 +601,9 @@
       net.paramCount().toLocaleString() + ' 参数 · 本地推理 · ' +
       (window.__OTHELLO_INLINE__ ? '单文件离线版' : 'sha256 ' + String(net.meta.sha256).slice(0, 8));
 
-    newGame();
-    showRules();
+    state.blackRate = evaluateBlackRate();
+    setRulesState('ready');
+    render();
   }
 
   // 供自动化验收脚本使用；不参与游戏逻辑，也不暴露任何外部能力

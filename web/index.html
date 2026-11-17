@@ -124,8 +124,12 @@
                 首次打开需先下载 4.3 MB 权重，之后使用浏览器缓存。
             </p>
 
+            <p class="rules-status" id="rules-status" role="status" aria-live="polite">
+                正在加载模型（4.3 MB，首次打开会慢一些）…
+            </p>
+
             <div class="rules-actions">
-                <button class="btn primary" id="btn-rules-start" type="button">开始对局</button>
+                <button class="btn primary" id="btn-rules-start" type="button" aria-disabled="true">模型加载中…</button>
             </div>
         </div>
     </div>

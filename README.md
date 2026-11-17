@@ -22,7 +22,7 @@
 - **本地预览**：`python -m http.server 8765 --directory web` → <http://127.0.0.1:8765/>
 - **单文件离线版**：`node tools/build_single.mjs` → `dist/othello-offline.html`（约 5.8 MB，双击即玩，可微信直发）
 
-打开页面会先弹出一张规则卡片，点「开始对局」进入棋盘；之后随时可以点「规则」重看，按 Esc 或点遮罩也能关闭。
+打开页面会先弹出规则卡片：模型还在下载时按钮显示「模型加载中…」，就绪后变成「开始对局」；之后随时可以点「规则」重看，按 Esc 或点遮罩也能关闭。
 
 权重由 `src/scripts/export_web_weights.py` 从 `models/alphazero_net.pth` 导出，JS 前向与 PyTorch 逐值对齐（容差 2e-4）。本机实测单次推理约 5 ms，160 次模拟约 1 秒，不需要 GPU。部署、更新模型与常见问题见 [部署与分享](docs/DEPLOY.md)。
 

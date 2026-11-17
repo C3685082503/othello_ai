@@ -153,6 +153,41 @@ async function main() {
       throw new Error(`等待超时：${label}`);
     };
 
+    // 0. 慢网模式：只验证「规则先出现、按钮处于加载中」这一条
+    //    用 CDP 把带宽压到 20 KB/s 后强制重载，模拟国内首次访问。
+    if (process.env.SLOW === '1') {
+      await cdp.send('Network.enable');
+      await cdp.send('Network.emulateNetworkConditions', {
+        offline: false,
+        latency: 300,
+        downloadThroughput: 20 * 1024,
+        uploadThroughput: 20 * 1024
+      });
+      await cdp.send('Page.reload', { ignoreCache: true });
+      await waitUntil(
+        "document.readyState === 'complete' && !!document.getElementById('rules') && !!document.getElementById('model-info')",
+        '慢速重载完成'
+      );
+      await sleep(600);
+      const early = await evaluate(
+        "(() => { const b = document.getElementById('btn-rules-start'); return { rules: !document.getElementById('rules').hidden, aria: b.getAttribute('aria-disabled'), text: b.textContent.trim(), status: document.getElementById('rules-status').textContent.trim(), model: document.getElementById('model-info').textContent.trim() }; })()",
+        false
+      );
+      record(
+        '慢网下规则先出现、按钮为加载中',
+        early.rules && early.aria === 'true' && early.text === '模型加载中…' && /加载/.test(early.model),
+        JSON.stringify(early)
+      );
+
+      const slowOut = join(root, 'docs');
+      mkdirSync(slowOut, { recursive: true });
+      const slowShot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      writeFileSync(join(slowOut, 'slow-load.png'), Buffer.from(slowShot.data, 'base64'));
+      record('慢速首屏截图', true, join(slowOut, 'slow-load.png'));
+      console.log('\nSLOW 模式只验证首屏，提前结束');
+      return;
+    }
+
     // 1. 模型加载
     await waitUntil(
       "document.readyState === 'complete' && !!document.getElementById('model-info')",
@@ -166,7 +201,18 @@ async function main() {
     const modelInfo = await evaluate("document.getElementById('model-info').textContent", false);
     record('模型加载', /1,132,737/.test(modelInfo), modelInfo);
 
-    // 1.5 开局规则弹窗：应当先出现，点「开始对局」后关闭
+    // 1.5 规则弹窗：模型就绪后按钮应可用，且加载提示隐藏
+    const startBtn = await evaluate(
+      "(() => { const b = document.getElementById('btn-rules-start'); const n = document.getElementById('rules-status'); return { aria: b.getAttribute('aria-disabled'), text: b.textContent.trim(), noteHidden: n.hidden }; })()",
+      false
+    );
+    record(
+      '模型就绪后「开始对局」可用',
+      startBtn.aria === null && startBtn.text === '开始对局' && startBtn.noteHidden === true,
+      JSON.stringify(startBtn)
+    );
+
+    // 1.6 开局规则弹窗：应当先出现，点「开始对局」后关闭
     const rulesShown = await evaluate("!document.getElementById('rules').hidden", false);
     record('开局显示规则弹窗', rulesShown, rulesShown ? '规则可见' : '规则未显示');
     await evaluate("document.getElementById('btn-rules-start').click()", false);
