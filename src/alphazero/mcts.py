@@ -143,7 +143,7 @@ class MCTS:
 
         # === 动态残局算力 ===
         original_sims = self.num_simulations
-        empty_count = sum(row.count(0) for row in board.board)
+        empty_count = sum(1 for row in board.board for cell in row if cell == 0)
         if empty_count < 12:
             self.num_simulations = 800  # 残局直接暴走，拉高到800次
             #print(f"!!! 残局特训（剩余{empty_count}格），模拟次数临时提升至 800 !!!", flush=True)

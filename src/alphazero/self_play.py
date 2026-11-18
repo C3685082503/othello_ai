@@ -1,3 +1,4 @@
+import argparse
 import torch
 import numpy as np
 import random
@@ -8,9 +9,11 @@ from src.alphazero.mcts import MCTS
 from src.paths import SELF_PLAY_CHECKPOINT, SELF_PLAY_DATA
 
 
-def self_play(num_games=500, num_simulations=200, temperature=1.0):
+def self_play(num_games=500, num_simulations=200, temperature=1.0, append=False):
     """
     让 MCTS+NN 自己和自己下棋，生成训练数据。
+
+    append=True 时会把新数据追加到已有的 data/self_play_data.pt，而不是覆盖。
     """
     mcts = MCTS(c_puct=1.0, num_simulations=num_simulations)
     all_states = []
@@ -22,12 +25,18 @@ def self_play(num_games=500, num_simulations=200, temperature=1.0):
     start_game = 0
     if os.path.exists(checkpoint_path):
         print(f">>> 发现断点存档，正在加载...", flush=True)
-        checkpoint = torch.load(checkpoint_path, map_location='cpu')
+        checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
         all_states = checkpoint['all_states']
         all_pis = checkpoint['all_pis']
         all_values = checkpoint['all_values']
         start_game = checkpoint['current_game']
         print(f">>> 从第 {start_game + 1} 局继续，已加载 {len(all_states)} 条数据", flush=True)
+    elif append and os.path.exists(SELF_PLAY_DATA):
+        old = torch.load(SELF_PLAY_DATA, map_location='cpu', weights_only=False)
+        all_states = list(old['states'])
+        all_pis = [p.numpy() for p in old['pis']]
+        all_values = old['values'].tolist()
+        print(f">>> 追加模式：已有 {len(all_states)} 条样本，本次再生成 {num_games} 局", flush=True)
     # ========================
 
     print(f"开始自我对弈 {num_games} 局...", flush=True)
@@ -105,6 +114,11 @@ def self_play(num_games=500, num_simulations=200, temperature=1.0):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="自我对弈生成训练数据")
+    parser.add_argument("--games", type=int, default=1000, help="本次生成局数")
+    parser.add_argument("--sims", type=int, default=200, help="每步 MCTS 模拟次数")
+    parser.add_argument("--append", action="store_true", help="追加到已有数据，不覆盖")
+    args = parser.parse_args()
+
     random.seed(42)
-    # 先跑 5 局测试一下流程，跑通后再改成 50 或 100
-    self_play(num_games=1000, num_simulations=200)
+    self_play(num_games=args.games, num_simulations=args.sims, append=args.append)
