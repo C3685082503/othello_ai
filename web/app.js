@@ -17,8 +17,8 @@
   var BLACK = engine.BLACK;
   var WHITE = engine.WHITE;
   // 翻子动画：单个棋子翻面 300ms，按离落点的距离错开 42ms，最远延迟 210ms
-  var ANIM_DURATION = 300;
-  var ANIM_STEP = 42;
+  var ANIM_DURATION = 180;
+  var ANIM_STEP = 18;
   // 空位 ≤ 11 时改用 alpha-beta 精确求解（本机 10 格 7–36ms，11 格 29–115ms）
   var ENDGAME_EMPTIES = 11;
   var solver = window.OthelloEndgame || null;
@@ -158,8 +158,8 @@
   }
 
   /**
-   * 新落子：从 45% 放大并淡入（带一点回弹）
-   * 被翻的棋子：前半段显示旧色、后半段显示新色，用 scaleX 做 180° 翻面
+   * 新落子：从 82% 轻微放大淡入，不做回弹。
+   * 被翻的棋子：新子先完整画在下面，旧子缩小 6% 并淡出；不压扁、不抬起。
    */
   function drawAnimatedPiece(anim, cx, cy, now) {
     var p = animProgress(anim, now);
@@ -169,11 +169,12 @@
       return;
     }
 
+    var e = easeOutCubic(p);
+
     if (anim.from === 0) {
-      // 落子：从 55% 放大，末端有一点轻微过冲
-      var scale = 0.55 + 0.45 * easeOutCubic(p) + 0.05 * Math.sin(Math.PI * p);
+      var scale = 0.82 + 0.18 * e;
       ctx.save();
-      ctx.globalAlpha = Math.min(1, p * 2.2);
+      ctx.globalAlpha = Math.min(1, p * 1.8);
       ctx.translate(cx, cy);
       ctx.scale(scale, scale);
       drawPiece(0, 0, CELL * 0.4, anim.to);
@@ -181,14 +182,15 @@
       return;
     }
 
-    // 翻子：中途抬起 2px，scaleX 走 1 → 0 → 1，在 0 附近换色
-    var sx = Math.max(0.02, Math.abs(Math.cos(p * Math.PI)));
-    var color = p < 0.5 ? anim.from : anim.to;
-    var lift = 2 * Math.sin(p * Math.PI);
+    // 新颜色先画满，旧颜色像一层薄幕退场，避免两色同时半透明糊成灰块
+    drawPiece(cx, cy, CELL * 0.4, anim.to);
+
     ctx.save();
-    ctx.translate(cx, cy - lift);
-    ctx.scale(sx, 1);
-    drawPiece(0, 0, CELL * 0.4, color);
+    ctx.globalAlpha = 1 - e;
+    ctx.translate(cx, cy);
+    var shrink = 1 - 0.06 * e;
+    ctx.scale(shrink, shrink);
+    drawPiece(0, 0, CELL * 0.4, anim.from);
     ctx.restore();
   }
 
@@ -423,7 +425,7 @@
         idx: i,
         from: before[i],
         to: after,
-        delay: Math.min(210, dist * ANIM_STEP)
+        delay: Math.min(70, dist * ANIM_STEP)
       });
     }
 
