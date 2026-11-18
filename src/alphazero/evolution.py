@@ -6,11 +6,15 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
 from src.alphazero.network import AlphaZeroNet
+from src.alphazero.symmetry import apply_policy_symmetry, apply_state_symmetry
 from src.game_engine.board import Board, BLACK, WHITE
 from src.alphazero.mcts import MCTS
 import os
 
 from src.paths import BASELINE_MODEL, BEST_MODEL, NEW_MODEL, SELF_PLAY_DATA
+
+# 当前自对弈数据训练时是否启用 8 对称在线增强
+USE_SYMMETRY = True
 
 
 def current_best_model_path():
@@ -24,6 +28,9 @@ def train_network(epochs=5):
     data = torch.load(SELF_PLAY_DATA)
     dataset = TensorDataset(data['states'], data['pis'], data['values'])
     dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
+
+    if USE_SYMMETRY:
+        print(">>> 已启用 8 对称在线增强（每批分 8 组，状态与策略同步变换）")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = AlphaZeroNet().to(device)
@@ -43,6 +50,16 @@ def train_network(epochs=5):
         model.train()
         total_loss = 0
         for batch_states, batch_pis, batch_values in dataloader:
+            if USE_SYMMETRY:
+                # 每批打乱后分 8 组，分别施加 8 种 dihedral 变换。
+                # 这样每个 batch 都覆盖全部对称，且每个样本每轮看到的变换不同。
+                order = torch.randperm(batch_states.size(0))
+                for t, idx in enumerate(torch.chunk(order, 8)):
+                    if idx.numel() == 0:
+                        continue
+                    batch_states[idx] = apply_state_symmetry(batch_states[idx], t)
+                    batch_pis[idx] = apply_policy_symmetry(batch_pis[idx], t)
+
             batch_states = batch_states.to(device)
             batch_pis = batch_pis.to(device)
             batch_values = batch_values.to(device)
