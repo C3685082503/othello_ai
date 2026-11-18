@@ -65,11 +65,59 @@
     this.cacheRoot = null;
   };
 
+  // ---------- Dirichlet 噪声（仅对局评测/自对弈用） ----------
+  // 与 Python 端的 np.random.dirichlet(alpha) 等价：Gamma(alpha) 归一化。
+
+  function randn() {
+    var u = 0;
+    var v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  function gammaSample(alpha) {
+    if (alpha < 1) {
+      var u = Math.random();
+      return gammaSample(alpha + 1) * Math.pow(u, 1 / alpha);
+    }
+    var d = alpha - 1 / 3;
+    var c = 1 / Math.sqrt(9 * d);
+    while (true) {
+      var x;
+      var v;
+      do {
+        x = randn();
+        v = 1 + c * x;
+      } while (v <= 0);
+      v = v * v * v;
+      var u2 = Math.random();
+      if (u2 < 1 - 0.0331 * x * x * x * x) return d * v;
+      if (Math.log(u2) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+    }
+  }
+
+  function dirichlet(n, alpha) {
+    var out = new Array(n);
+    var sum = 0;
+    var i;
+    for (i = 0; i < n; i++) {
+      out[i] = gammaSample(alpha);
+      sum += out[i];
+    }
+    if (sum <= 0) {
+      for (i = 0; i < n; i++) out[i] = 1 / n;
+      return out;
+    }
+    for (i = 0; i < n; i++) out[i] /= sum;
+    return out;
+  }
+
   /**
    * 扩展一个叶子节点，返回该局面的价值（node.player 视角）。
    * 内部完成「策略先验 + 价值评估」的唯一一次前向。
    */
-  MCTS.prototype.expand = function (node) {
+  MCTS.prototype.expand = function (node, addNoise, dirichletAlpha, dirichletEpsilon) {
     var moves = node.board.legalMoves(node.player);
     if (moves.length === 0) return 0;
 
@@ -80,16 +128,24 @@
     var i;
     for (i = 0; i < moves.length; i++) total += probs[moves[i]];
 
+    var priors = new Array(moves.length);
     for (i = 0; i < moves.length; i++) {
-      var prior;
-      if (total > 0) {
-        prior = probs[moves[i]] / total;
-      } else {
-        prior = 1 / moves.length; // 理论上不会发生，兜底避免全 0
+      priors[i] = total > 0 ? probs[moves[i]] / total : 1 / moves.length;
+    }
+
+    if (addNoise) {
+      var alpha = dirichletAlpha === undefined ? 0.3 : dirichletAlpha;
+      var eps = dirichletEpsilon === undefined ? 0.25 : dirichletEpsilon;
+      var noise = dirichlet(moves.length, alpha);
+      for (i = 0; i < moves.length; i++) {
+        priors[i] = (1 - eps) * priors[i] + eps * noise[i];
       }
+    }
+
+    for (i = 0; i < moves.length; i++) {
       var childBoard = node.board.clone();
       childBoard.stepIndex(moves[i]);
-      node.children.push(new Node(childBoard, -node.player, node, prior, moves[i]));
+      node.children.push(new Node(childBoard, -node.player, node, priors[i], moves[i]));
     }
     return out.value;
   };
@@ -175,9 +231,9 @@
     }
     if (!root) {
       root = new Node(board.clone(), player, null, 1, -1);
-      this.expand(root); // 根节点先扩展，保证 children 存在
+      this.expand(root, !!options.noise, options.dirichletAlpha, options.dirichletEpsilon);
     } else if (root.children.length === 0 && !root.board.isTerminal()) {
-      this.expand(root);
+      this.expand(root, !!options.noise, options.dirichletAlpha, options.dirichletEpsilon);
     }
 
     var started = Date.now();
