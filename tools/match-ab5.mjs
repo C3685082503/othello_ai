@@ -44,6 +44,7 @@ const useEndgame = arg('endgame', '1') !== '0';
 const useReuse = arg('reuse', '1') !== '0';
 const useNoise = arg('noise', '0') === '1';
 const label = arg('label', '');
+const weightsDir = arg('weights-dir', 'web');
 const bookFile = arg('book-file', '');
 let bookLines = null;
 if (bookFile) {
@@ -56,8 +57,8 @@ if (bookFile) {
 const python = process.env.PYTHON || 'D:/anaconda3/envs/torch_env/python.exe';
 
 // ---------- 网络 ----------
-const meta = JSON.parse(readFileSync(join(root, 'web', 'weights.json'), 'utf8'));
-const bin = readFileSync(join(root, 'web', 'weights.bin'));
+const meta = JSON.parse(readFileSync(resolve(root, weightsDir, 'weights.json'), 'utf8'));
+const bin = readFileSync(resolve(root, weightsDir, 'weights.bin'));
 const net = new Net(meta, bin.buffer.slice(bin.byteOffset, bin.byteOffset + bin.byteLength));
 const mcts = new MCTS(net, { cPuct: 1.5 });
 
@@ -237,6 +238,7 @@ async function main() {
   console.log(
     `对局配置：${games} 局，JS ${sims} 次模拟（${colorText}），AB5 深度 ${depth}，` +
     `开局库 ${bookLines ? bookLines.length + ' 条' : '未使用'}，` +
+    `权重 ${weightsDir}，` +
     `结构化开局 ${book} 手 / 随机开局 ${openings} 手，` +
     `残局精算 ${useEndgame ? '开' : '关'}，树复用 ${useReuse ? '开' : '关'}，` +
     `根噪声 ${useNoise ? '开' : '关'}`
