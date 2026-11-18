@@ -506,6 +506,62 @@ async function main() {
         terminal.top < terminal.vh,
       JSON.stringify(terminal)
     );
+
+    // 7.1 战绩：记录一局、列表展示、清空
+    await evaluate('window.__OTHELLO__.recordResult()', false);
+    await evaluate("document.getElementById('btn-records').click()", false);
+    await sleep(150);
+    const recorded = await evaluate(
+      `(() => ({
+        open: !document.getElementById('records').hidden,
+        count: document.querySelectorAll('#records-list li').length,
+        summary: document.getElementById('records-summary').textContent,
+        first: (document.querySelector('#records-list li') || {}).textContent || ''
+      }))()`,
+      false
+    );
+    record(
+      '战绩记录一局并展示',
+      recorded.open && recorded.count === 1 && /1 胜/.test(recorded.summary) && /胜/.test(recorded.first),
+      JSON.stringify(recorded)
+    );
+
+    // 375px 下战绩弹窗不能横向溢出
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: 375,
+      height: 812,
+      deviceScaleFactor: 2,
+      mobile: true
+    });
+    await sleep(250);
+    const recordsNarrow = await evaluate(
+      '(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }))()',
+      false
+    );
+    record(
+      '375px 战绩弹窗无横向溢出',
+      recordsNarrow.sw <= recordsNarrow.iw + 1,
+      JSON.stringify(recordsNarrow)
+    );
+    const shotRecords = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    writeFileSync(join(root, 'docs', 'records.png'), Buffer.from(shotRecords.data, 'base64'));
+    await cdp.send('Emulation.clearDeviceMetricsOverride');
+    await sleep(200);
+
+    await evaluate(
+      "window.confirm = () => true; document.getElementById('records-clear').click()",
+      false
+    );
+    await sleep(100);
+    const cleared = await evaluate(
+      "document.querySelectorAll('#records-list li').length",
+      false
+    );
+    record('清空战绩', cleared === 0, 'count=' + cleared);
+
+    await evaluate("document.getElementById('records-close').click()", false);
+    await sleep(100);
+
     await evaluate('window.__OTHELLO__.newGame()', false);
     await sleep(200);
 

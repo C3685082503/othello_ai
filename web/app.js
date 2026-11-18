@@ -23,6 +23,10 @@
   var ENDGAME_EMPTIES = 11;
   var solver = window.OthelloEndgame || null;
 
+  // 战绩：只保留最近 30 局，存在 localStorage
+  var RECORDS_KEY = 'othello.records.v1';
+  var RECORDS_LIMIT = 30;
+
   var canvas = document.getElementById('board');
   var ctx = canvas.getContext('2d');
 
@@ -47,6 +51,10 @@
     lastSearch: null,
     rulesOpen: false,
     rulesState: 'loading',
+    recordsOpen: false,
+    records: [],
+    recorded: false,
+    recordedAt: 0,
     thinkingStarted: 0,
     thinkingShown: false,
     thinkingTotal: 0,
@@ -125,7 +133,7 @@
   }
 
   function humanTurn() {
-    return !state.rulesOpen && !state.gameOver && !state.thinking && !state.animating &&
+    return !state.rulesOpen && !state.recordsOpen && !state.gameOver && !state.thinking && !state.animating &&
       state.board.currentPlayer === BLACK;
   }
 
@@ -433,6 +441,7 @@
     state.anims = anims;
     state.lastMove = idx;
     state.gameOver = state.board.isTerminal();
+    if (state.gameOver) recordResult();
     state.blackRate = evaluateBlackRate();
 
     var wasAnimating = state.animating;
@@ -551,6 +560,153 @@
     }
   }
 
+  // ---------- 战绩 ----------
+
+  function loadRecords() {
+    try {
+      var raw = window.localStorage.getItem(RECORDS_KEY);
+      if (!raw) return [];
+      var arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return [];
+      return arr.filter(function (r) {
+        return r && typeof r.t === 'number' &&
+          (r.result === 'win' || r.result === 'loss' || r.result === 'draw') &&
+          typeof r.black === 'number' && typeof r.white === 'number';
+      }).slice(0, RECORDS_LIMIT);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveRecords() {
+    try {
+      window.localStorage.setItem(RECORDS_KEY, JSON.stringify(state.records));
+    } catch (e) {
+      // 隐私模式 / 存储满：保留内存里的记录即可
+    }
+  }
+
+  function pad2(n) {
+    return n < 10 ? '0' + n : '' + n;
+  }
+
+  function formatRecordTime(t) {
+    var d = new Date(t);
+    return (d.getMonth() + 1) + '-' + d.getDate() + ' ' +
+      pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  }
+
+  function simsLabel(sims) {
+    if (sims === 80) return '轻松';
+    if (sims === 160) return '标准';
+    if (sims === 320) return '认真';
+    return sims + ' 模拟';
+  }
+
+  function recordResult() {
+    if (state.recorded || !state.gameOver) return;
+
+    var winner = state.board.winner();
+    var score = state.board.score();
+    var rec = {
+      t: Date.now(),
+      result: winner === 0 ? 'draw' : (winner === BLACK ? 'win' : 'loss'),
+      black: score[0],
+      white: score[1],
+      sims: state.sims,
+      plies: state.snapshots.length
+    };
+
+    state.records.unshift(rec);
+    if (state.records.length > RECORDS_LIMIT) state.records.length = RECORDS_LIMIT;
+    state.recorded = true;
+    state.recordedAt = rec.t;
+    saveRecords();
+    if (state.recordsOpen) renderRecords();
+  }
+
+  function removeRecord(t) {
+    state.records = state.records.filter(function (r) { return r.t !== t; });
+    saveRecords();
+    if (state.recordsOpen) renderRecords();
+  }
+
+  function renderRecords() {
+    var list = document.getElementById('records-list');
+    var summary = document.getElementById('records-summary');
+    var clear = document.getElementById('records-clear');
+    if (!list || !summary || !clear) return;
+
+    list.textContent = '';
+    if (!state.records.length) {
+      summary.textContent = '还没有对局记录。';
+      clear.disabled = true;
+      return;
+    }
+
+    var wins = 0, losses = 0, draws = 0;
+    for (var i = 0; i < state.records.length; i++) {
+      var r = state.records[i];
+      if (r.result === 'win') wins++;
+      else if (r.result === 'loss') losses++;
+      else draws++;
+    }
+    var rate = Math.round((wins / state.records.length) * 100);
+    summary.textContent = '最近 ' + state.records.length + ' 局：' +
+      wins + ' 胜 ' + losses + ' 负 ' + draws + ' 平 · 胜率 ' + rate + '%';
+    clear.disabled = false;
+
+    for (var j = 0; j < state.records.length; j++) {
+      var rec = state.records[j];
+      var li = document.createElement('li');
+
+      var date = document.createElement('span');
+      date.className = 'rec-date';
+      date.textContent = formatRecordTime(rec.t);
+
+      var result = document.createElement('span');
+      result.className = 'rec-result ' + rec.result;
+      result.textContent = rec.result === 'win' ? '胜' : (rec.result === 'loss' ? '负' : '平');
+
+      var score = document.createElement('span');
+      score.className = 'rec-score';
+      score.textContent = '黑 ' + rec.black + ' : ' + rec.white;
+
+      var meta = document.createElement('span');
+      meta.className = 'rec-meta';
+      meta.textContent = simsLabel(rec.sims);
+
+      li.appendChild(date);
+      li.appendChild(result);
+      li.appendChild(score);
+      li.appendChild(meta);
+      list.appendChild(li);
+    }
+  }
+
+  function openRecords() {
+    state.recordsOpen = true;
+    renderRecords();
+    document.getElementById('records').hidden = false;
+    document.getElementById('records-close').focus();
+  }
+
+  function closeRecords() {
+    state.recordsOpen = false;
+    document.getElementById('records').hidden = true;
+    document.getElementById('btn-records').focus();
+  }
+
+  function clearRecords() {
+    if (!state.records.length) return;
+    if (!window.confirm('清空最近 30 局记录？')) return;
+    state.records = [];
+    state.recorded = false;
+    state.recordedAt = 0;
+    saveRecords();
+    renderRecords();
+  }
+
   function undo() {
     if (state.thinking) return;
     var target = -1;
@@ -558,6 +714,13 @@
       if (state.snapshots[i].mover === BLACK) { target = i; break; }
     }
     if (target < 0) return;
+
+    // 终局后撤销：把刚记录的那一局从战绩里移除，避免重复
+    if (state.recorded) {
+      removeRecord(state.recordedAt);
+      state.recorded = false;
+      state.recordedAt = 0;
+    }
 
     var snap = state.snapshots[target];
     state.board.cells.set(snap.cells);
@@ -582,6 +745,8 @@
     state.snapshots = [];
     state.thinking = false;
     state.gameOver = false;
+    state.recorded = false;
+    state.recordedAt = 0;
     state.lastMove = -1;
     state.anims = [];
     state.animating = false;
@@ -815,11 +980,28 @@
     document.getElementById('btn-rules').addEventListener('click', showRules);
     document.getElementById('btn-rules-start').addEventListener('click', onStartClick);
 
-    // 点遮罩空白处关闭；规则打开时把焦点圈在弹窗内
+    document.getElementById('btn-records').addEventListener('click', openRecords);
+    document.getElementById('records-close').addEventListener('click', closeRecords);
+    document.getElementById('records').addEventListener('click', function (e) {
+      if (e.target === e.currentTarget) closeRecords();
+    });
+    document.getElementById('records-clear').addEventListener('click', clearRecords);
+
+    // 点遮罩空白处关闭；弹窗打开时把焦点圈在弹窗内
     document.getElementById('rules').addEventListener('click', function (e) {
       if (e.target === e.currentTarget) hideRules();
     });
     document.addEventListener('keydown', function (e) {
+      if (state.recordsOpen) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeRecords();
+        } else if (e.key === 'Tab') {
+          e.preventDefault();
+          document.getElementById('records-close').focus();
+        }
+        return;
+      }
       if (!state.rulesOpen) return;
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -872,6 +1054,7 @@
   async function boot() {
     bind();
     prewarmSprites();
+    state.records = loadRecords();
 
     // 规则和棋盘都不依赖模型：先摆好、先弹出。
     // 否则慢网下要等 4.3 MB 权重下完规则才出现，页面看起来像卡死。
@@ -916,7 +1099,9 @@
     aiTurn: aiTurn,
     newGame: newGame,
     undo: undo,
-    render: render
+    render: render,
+    records: function () { return state.records.slice(); },
+    recordResult: recordResult
   };
 
   if (document.readyState === 'loading') {
