@@ -129,6 +129,18 @@
       state.board.currentPlayer === BLACK;
   }
 
+  /** 等当前翻子动画播完；没有动画时立即 resolve */
+  function waitAnimation() {
+    if (!state.animating) return Promise.resolve();
+    return new Promise(function (resolve) {
+      function check() {
+        if (!state.animating) resolve();
+        else requestAnimationFrame(check);
+      }
+      requestAnimationFrame(check);
+    });
+  }
+
   function easeOutCubic(t) {
     return 1 - Math.pow(1 - t, 3);
   }
@@ -180,18 +192,30 @@
     ctx.restore();
   }
 
-  function drawBoard() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // 静态棋盘底图只画一次，动画时整张 drawImage，省掉每帧 128 次 fill/stroke
+  var boardBg = null;
 
+  function buildBoardBackground() {
+    var bg = document.createElement('canvas');
+    bg.width = canvas.width;
+    bg.height = canvas.height;
+    var g = bg.getContext('2d');
     for (var r = 0; r < 8; r++) {
       for (var c = 0; c < 8; c++) {
-        ctx.fillStyle = (r + c) % 2 === 0 ? '#2f7a5c' : '#256b4f';
-        ctx.fillRect(c * CELL, r * CELL, CELL, CELL);
-        ctx.strokeStyle = 'rgba(10, 16, 26, 0.35)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(c * CELL + 0.5, r * CELL + 0.5, CELL, CELL);
+        g.fillStyle = (r + c) % 2 === 0 ? '#2f7a5c' : '#256b4f';
+        g.fillRect(c * CELL, r * CELL, CELL, CELL);
+        g.strokeStyle = 'rgba(10, 16, 26, 0.35)';
+        g.lineWidth = 1;
+        g.strokeRect(c * CELL + 0.5, r * CELL + 0.5, CELL, CELL);
       }
     }
+    return bg;
+  }
+
+  function drawBoard() {
+    if (!boardBg) boardBg = buildBoardBackground();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(boardBg, 0, 0);
 
     var legal = humanTurn() ? state.board.legalMoves(BLACK) : [];
 
@@ -440,6 +464,8 @@
     applyMove(idx);
 
     if (state.gameOver) return;
+    // 先让翻子动画播完，再开始 AI 搜索；否则推理会阻塞主线程，动画掉帧
+    await waitAnimation();
     await aiTurn();
   }
 
@@ -449,6 +475,7 @@
     while (!state.gameOver && state.board.currentPlayer !== BLACK && guard < 4) {
       guard++;
       if (!mcts) return;
+      if (state.animating) await waitAnimation();
 
       var myEpoch = state.epoch;
       var player = state.board.currentPlayer;
