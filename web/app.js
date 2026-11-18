@@ -40,6 +40,7 @@
     epoch: 0,
     anims: [],
     animStart: 0,
+    animating: false,
     hover: -1,
     kbCursor: 27,
     kbFocus: false,
@@ -55,13 +56,28 @@
 
   // ---------- 绘制 ----------
 
-  function drawPiece(cx, cy, radius, player) {
-    if (radius <= 0.5) return;
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.shadowBlur = radius * 0.3;
-    ctx.shadowOffsetY = radius * 0.1;
-    var grad = ctx.createRadialGradient(
+  // 棋子预渲染成离屏精灵：径向渐变 + 阴影只算一次，动画时只做 drawImage。
+  var PIECE_PAD = 10;
+  var pieceSprites = {};
+
+  function buildPieceSprite(player) {
+    var radius = CELL * 0.4;
+    var scale = 2; // 2x 分辨率，缩放后仍然清晰
+    var cssSize = (radius + PIECE_PAD) * 2;
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(cssSize * scale);
+    canvas.height = canvas.width;
+
+    var c = canvas.getContext('2d');
+    c.scale(scale, scale);
+    var cx = cssSize / 2;
+    var cy = cssSize / 2;
+
+    c.save();
+    c.shadowColor = 'rgba(0,0,0,0.5)';
+    c.shadowBlur = radius * 0.3;
+    c.shadowOffsetY = radius * 0.1;
+    var grad = c.createRadialGradient(
       cx - radius * 0.32, cy - radius * 0.4, radius * 0.12, cx, cy, radius
     );
     if (player === 1) {
@@ -73,26 +89,44 @@
       grad.addColorStop(0.55, '#edf0f4');
       grad.addColorStop(1, '#c0c6cf');
     }
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fillStyle = grad;
-    ctx.fill();
-    ctx.restore();
+    c.beginPath();
+    c.arc(cx, cy, radius, 0, Math.PI * 2);
+    c.fillStyle = grad;
+    c.fill();
+    c.restore();
 
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.lineWidth = Math.max(1, radius * 0.05);
-    ctx.strokeStyle = player === 1 ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.14)';
-    ctx.stroke();
+    c.beginPath();
+    c.arc(cx, cy, radius, 0, Math.PI * 2);
+    c.lineWidth = Math.max(1, radius * 0.05);
+    c.strokeStyle = player === 1 ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.14)';
+    c.stroke();
 
-    ctx.beginPath();
-    ctx.ellipse(cx - radius * 0.32, cy - radius * 0.42, radius * 0.32, radius * 0.2, -0.6, 0, Math.PI * 2);
-    ctx.fillStyle = player === 1 ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.9)';
-    ctx.fill();
+    c.beginPath();
+    c.ellipse(cx - radius * 0.32, cy - radius * 0.42, radius * 0.32, radius * 0.2, -0.6, 0, Math.PI * 2);
+    c.fillStyle = player === 1 ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.9)';
+    c.fill();
+
+    return { canvas: canvas, cssSize: cssSize, radius: radius };
+  }
+
+  function drawPiece(cx, cy, radius, player) {
+    if (radius <= 0.5) return;
+    var sprite = pieceSprites[player];
+    if (!sprite) sprite = pieceSprites[player] = buildPieceSprite(player);
+    var scale = radius / sprite.radius;
+    var size = sprite.cssSize * scale;
+    ctx.drawImage(sprite.canvas, cx - size / 2, cy - size / 2, size, size);
+  }
+
+  // 首帧前预生成黑白精灵，避免第一次落子时临时构建造成一次卡顿
+  function prewarmSprites() {
+    if (!pieceSprites[1]) pieceSprites[1] = buildPieceSprite(1);
+    if (!pieceSprites[-1]) pieceSprites[-1] = buildPieceSprite(-1);
   }
 
   function humanTurn() {
-    return !state.rulesOpen && !state.gameOver && !state.thinking && state.board.currentPlayer === BLACK;
+    return !state.rulesOpen && !state.gameOver && !state.thinking && !state.animating &&
+      state.board.currentPlayer === BLACK;
   }
 
   function easeOutCubic(t) {
@@ -261,7 +295,12 @@
       if (animProgress(state.anims[i], now) < 1) { running = true; break; }
     }
     if (running) requestAnimationFrame(frame);
-    else state.anims = [];
+    else {
+      state.anims = [];
+      state.animating = false;
+      // 动画结束后补一帧：此时 humanTurn 恢复，合法落点提示才会出现
+      drawBoard();
+    }
   }
 
   function scheduleDraw() {
@@ -283,7 +322,8 @@
     if (state.gameOver) {
       blackCard.classList.remove('is-active');
       whiteCard.classList.remove('is-active');
-      turnText.textContent = '对局结束';
+      var winner = state.board.winner();
+      turnText.textContent = winner === 0 ? '平局' : (winner === BLACK ? '你赢了' : 'AI 获胜');
       turn.className = 'turn-badge is-done';
     } else {
       var isBlackTurn = state.board.currentPlayer === BLACK;
@@ -368,8 +408,16 @@
     state.lastMove = idx;
     state.gameOver = state.board.isTerminal();
     state.blackRate = evaluateBlackRate();
+
+    var wasAnimating = state.animating;
+    if (anims.length) state.animating = true;
+
     render();
-    if (anims.length) requestAnimationFrame(frame);
+
+    // 保证同一时间只有一个动画循环；AI 连走时只替换 anims，不重复启动
+    if (anims.length && !wasAnimating) {
+      requestAnimationFrame(frame);
+    }
   }
 
   function evaluateBlackRate() {
@@ -491,6 +539,7 @@
     state.gameOver = false;
     state.lastMove = -1;
     state.anims = [];
+    state.animating = false;
     state.lastSearch = null;
     if (mcts) mcts.resetCache();
     state.blackRate = evaluateBlackRate();
@@ -506,6 +555,7 @@
     state.gameOver = false;
     state.lastMove = -1;
     state.anims = [];
+    state.animating = false;
     state.hover = -1;
     state.lastSearch = null;
     state.blackRate = 0.5;
@@ -792,6 +842,7 @@
 
   async function boot() {
     bind();
+    prewarmSprites();
 
     // 规则和棋盘都不依赖模型：先摆好、先弹出。
     // 否则慢网下要等 4.3 MB 权重下完规则才出现，页面看起来像卡死。

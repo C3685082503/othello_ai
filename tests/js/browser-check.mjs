@@ -274,12 +274,12 @@ async function main() {
 
     // 2.1 翻子动画：应有旧色→新色的记录，且按距离错峰
     const animState = await evaluate(
-      "(() => { const a = window.__OTHELLO__.state.anims; return { n: a.length, hasFrom: a.every((x) => 'from' in x && 'to' in x), maxDelay: a.reduce((m, x) => Math.max(m, x.delay), 0), flips: a.filter((x) => x.from !== 0).length }; })()",
+      "(() => { const a = window.__OTHELLO__.state.anims; return { n: a.length, hasFrom: a.every((x) => 'from' in x && 'to' in x), maxDelay: a.reduce((m, x) => Math.max(m, x.delay), 0), flips: a.filter((x) => x.from !== 0).length, animating: window.__OTHELLO__.state.animating }; })()",
       false
     );
     record(
       '落子后触发分波翻子动画',
-      animState.n > 1 && animState.hasFrom && animState.maxDelay > 0 && animState.flips > 0,
+      animState.n > 1 && animState.hasFrom && animState.maxDelay > 0 && animState.flips > 0 && animState.animating === true,
       JSON.stringify(animState)
     );
 
@@ -313,10 +313,10 @@ async function main() {
     );
     await sleep(550); // 等 AI 落子的翻子动画播完（最长约 420ms）
     const settled = await evaluate(
-      "(() => ({ ringHidden: document.getElementById('turn-ring').hidden, card: document.getElementById('white-card').classList.contains('is-thinking'), text: document.getElementById('turn-text').textContent.trim(), anims: window.__OTHELLO__.state.anims.length }))()",
+      "(() => ({ ringHidden: document.getElementById('turn-ring').hidden, card: document.getElementById('white-card').classList.contains('is-thinking'), text: document.getElementById('turn-text').textContent.trim(), anims: window.__OTHELLO__.state.anims.length, animating: window.__OTHELLO__.state.animating }))()",
       false
     );
-    record('思考结束后视觉复位', settled.ringHidden && !settled.card && settled.anims === 0, JSON.stringify(settled));
+    record('思考结束后视觉复位', settled.ringHidden && !settled.card && settled.anims === 0 && settled.animating === false, JSON.stringify(settled));
     const afterClick = await evaluate(
       "(() => ({b: +document.getElementById('black-score').textContent, w: +document.getElementById('white-score').textContent, status: document.getElementById('status').textContent, timing: document.getElementById('timing').textContent}))()",
       false
@@ -475,7 +475,41 @@ async function main() {
     writeFileSync(shotPath, Buffer.from(shot.data, 'base64'));
     record('截图已保存', true, shotPath);
 
-    // 7. 无 JS 异常
+    // 7. 终局提示：状态行必须在视口内，且徽章显示胜负
+    const terminal = await evaluate(
+      `(() => {
+        const api = window.__OTHELLO__;
+        const b = api.board();
+        for (let i = 0; i < 64; i++) b.cells[i] = i < 40 ? 1 : -1;
+        b.currentPlayer = 1;
+        b.gameOver = true;
+        api.state.gameOver = true;
+        api.state.thinking = false;
+        api.state.anims = [];
+        api.state.animating = false;
+        api.render();
+        const status = document.getElementById('status');
+        const rect = status.getBoundingClientRect();
+        return {
+          status: status.textContent.trim(),
+          turn: document.getElementById('turn-text').textContent.trim(),
+          top: Math.round(rect.top),
+          vh: window.innerHeight
+        };
+      })()`,
+      false
+    );
+    record(
+      '终局提示可见且显示胜负',
+      /获胜|平局/.test(terminal.status) &&
+        /赢了|获胜|平局/.test(terminal.turn) &&
+        terminal.top < terminal.vh,
+      JSON.stringify(terminal)
+    );
+    await evaluate('window.__OTHELLO__.newGame()', false);
+    await sleep(200);
+
+    // 8. 无 JS 异常
     await sleep(500);
     record('无 JS 异常', cdp.errors.length === 0, cdp.errors.join(' | ') || 'clean');
 
