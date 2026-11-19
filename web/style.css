@@ -73,12 +73,32 @@ body {
 .header {
     width: 100%;
     margin-bottom: 22px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.coach-top {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    margin-top: 2px;
+    color: var(--accent);
+    border-color: rgba(242, 196, 92, 0.45);
+    background: rgba(242, 196, 92, 0.08);
+}
+
+.coach-top:hover {
+    color: var(--accent);
+    border-color: rgba(242, 196, 92, 0.75);
+    background: rgba(242, 196, 92, 0.14);
 }
 
 .brand {
     display: flex;
     align-items: center;
     gap: 14px;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .brand-mark {
