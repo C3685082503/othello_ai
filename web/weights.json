@@ -4,7 +4,7 @@
   "dtype": "float32",
   "count": 1132737,
   "bytes": 4530948,
-  "sha256": "482868fc83cf198270d727abd6bbe131f402cdea5c0d6c6e7772dc4e0d125882",
+  "sha256": "89e8c8ded70c2f04bfe1f765ccbabcb84092af3c6cd5f051d4a7af08e66c5cd0",
   "params": [
     {
       "name": "conv1.weight",
