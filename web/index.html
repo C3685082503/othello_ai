@@ -69,6 +69,7 @@
             </div>
             <div class="coach-actions">
                 <button class="btn ghost coach-btn" id="btn-hint" type="button" disabled>提示</button>
+                <button class="btn ghost coach-btn" id="btn-review" type="button" hidden>复盘</button>
             </div>
         </section>
 
@@ -161,6 +162,32 @@
             <ol class="records-list" id="records-list"></ol>
             <div class="rules-actions">
                 <button class="btn ghost" id="records-clear" type="button" disabled>清空记录</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 教练复盘：逐手重算，列出损失最大的几手 -->
+    <div class="rules" id="review" role="dialog" aria-modal="true" aria-labelledby="review-title" hidden>
+        <div class="rules-card review-card" role="document">
+            <div class="records-head">
+                <div>
+                    <p class="rules-kicker">教练复盘</p>
+                    <h2 id="review-title">本局复盘</h2>
+                </div>
+                <button class="records-close" id="review-close" type="button" aria-label="关闭复盘">×</button>
+            </div>
+            <p class="rules-sub" id="review-summary">正在准备…</p>
+            <div class="review-progress" id="review-progress" hidden>
+                <div class="progress-track"><div class="progress-bar" id="review-bar"></div></div>
+                <p class="review-progress-text" id="review-progress-text"></p>
+            </div>
+            <ol class="review-list" id="review-list"></ol>
+            <div class="review-board-wrap" id="review-board-wrap" hidden>
+                <canvas id="review-board" width="320" height="320" aria-label="复盘局面"></canvas>
+                <p class="rules-sub" id="review-detail"></p>
+            </div>
+            <div class="rules-actions">
+                <button class="btn ghost" id="review-close-btn" type="button">关闭</button>
             </div>
         </div>
     </div>

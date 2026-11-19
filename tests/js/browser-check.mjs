@@ -680,6 +680,90 @@ async function main() {
     await evaluate('window.__OTHELLO__.newGame()', false);
     await sleep(200);
 
+    // 7.4 终局复盘：按钮、列表、棋盘回看、375px
+    await evaluate("document.getElementById('toggle-coach').click()", false);
+    const reviewMove = await evaluate('window.__OTHELLO__.board().legalMoves(1)[0]', false);
+    await evaluate(`window.__OTHELLO__.playHuman(${reviewMove})`, false);
+    await sleep(300);
+    await waitUntil("window.__OTHELLO__.state.thinking === true", '复盘测试 AI 开始', 10000);
+    await waitUntil("window.__OTHELLO__.state.thinking === false", '复盘测试 AI 完成', 60000);
+
+    await evaluate(
+      "window.__OTHELLO__.state.gameOver = true; window.__OTHELLO__.render()",
+      false
+    );
+    await sleep(150);
+    const reviewBtn = await evaluate(
+      "!(document.getElementById('btn-review').hidden)",
+      false
+    );
+    record('终局出现复盘按钮', reviewBtn === true, String(reviewBtn));
+
+    await evaluate("document.getElementById('btn-review').click()", false);
+    await waitUntil(
+      "window.__OTHELLO__.state.coach.review !== null",
+      '复盘计算完成',
+      30000
+    );
+    const reviewData = await evaluate(
+      `(() => ({
+        count: document.querySelectorAll('#review-list li').length,
+        open: !document.getElementById('review').hidden,
+        boardHidden: document.getElementById('review-board-wrap').hidden,
+        summary: document.getElementById('review-summary').textContent
+      }))()`,
+      false
+    );
+    record(
+      '复盘列出人类走法',
+      reviewData.open && reviewData.count >= 1,
+      JSON.stringify(reviewData)
+    );
+
+    await evaluate("document.querySelector('#review-list li').click()", false);
+    await sleep(120);
+    const reviewDetail = await evaluate(
+      `(() => ({
+        hidden: document.getElementById('review-board-wrap').hidden,
+        detail: document.getElementById('review-detail').textContent,
+        w: document.getElementById('review-board').width
+      }))()`,
+      false
+    );
+    record(
+      '复盘可查看局面',
+      reviewDetail.hidden === false && /最佳/.test(reviewDetail.detail) && reviewDetail.w === 320,
+      JSON.stringify(reviewDetail)
+    );
+
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: 375,
+      height: 812,
+      deviceScaleFactor: 2,
+      mobile: true
+    });
+    await sleep(250);
+    const reviewNarrow = await evaluate(
+      '(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }))()',
+      false
+    );
+    record(
+      '375px 复盘弹窗无横向溢出',
+      reviewNarrow.sw <= reviewNarrow.iw + 1,
+      JSON.stringify(reviewNarrow)
+    );
+    const shotReview = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    writeFileSync(join(root, 'docs', 'review.png'), Buffer.from(shotReview.data, 'base64'));
+    await cdp.send('Emulation.clearDeviceMetricsOverride');
+    await sleep(200);
+
+    await evaluate("document.getElementById('review-close').click()", false);
+    await sleep(100);
+    await evaluate("document.getElementById('toggle-coach').click()", false);
+    await sleep(100);
+    await evaluate('window.__OTHELLO__.newGame()', false);
+    await sleep(200);
+
     // 8. 无 JS 异常
     await sleep(500);
     record('无 JS 异常', cdp.errors.length === 0, cdp.errors.join(' | ') || 'clean');

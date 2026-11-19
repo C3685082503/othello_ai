@@ -62,6 +62,9 @@
     thinkingTotal: 0,
     showCandidates: false,
     candidates: [],
+    moveLog: [],
+    reviewOpen: false,
+    reviewEpoch: 0,
     coach: {
       enabled: false,
       sims: 96,
@@ -71,7 +74,8 @@
       analysisKey: '',
       hint: null,
       feedback: null,
-      history: []
+      history: [],
+      review: null
     }
   };
 
@@ -146,7 +150,8 @@
   }
 
   function humanTurn() {
-    return !state.rulesOpen && !state.recordsOpen && !state.gameOver && !state.thinking && !state.animating &&
+    return !state.rulesOpen && !state.recordsOpen && !state.reviewOpen &&
+      !state.gameOver && !state.thinking && !state.animating &&
       state.board.currentPlayer === BLACK;
   }
 
@@ -184,8 +189,13 @@
 
     var text = document.getElementById('coach-text');
     var hintBtn = document.getElementById('btn-hint');
+    var reviewBtn = document.getElementById('btn-review');
     var c = state.coach;
     if (hintBtn) hintBtn.disabled = !(humanTurn() && !c.busy);
+    if (reviewBtn) {
+      reviewBtn.hidden = !(state.gameOver && state.coach.enabled);
+      reviewBtn.disabled = state.reviewOpen;
+    }
 
     if (c.feedback && c.feedback.text) {
       text.textContent = c.feedback.text;
@@ -367,7 +377,6 @@
 
   function drawCoachOverlay() {
     if (!coachApi) return;
-
     if (state.coach.hint && state.coach.hint.moves) {
       for (var i = 0; i < state.coach.hint.moves.length; i++) {
         var mv = state.coach.hint.moves[i].move;
@@ -416,6 +425,247 @@
     ctx.arc(ax + CELL * 0.3, ay - CELL * 0.3, 4, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
+  }
+
+  // ---------- 教练复盘 ----------
+
+  function reviewRows() {
+    var rows = [];
+    for (var i = 0; i < state.snapshots.length; i++) {
+      var snap = state.snapshots[i];
+      var log = state.moveLog[i];
+      if (!log || snap.mover !== BLACK || log.player !== BLACK) continue;
+      var b = new engine.Board();
+      b.cells.set(snap.cells);
+      b.currentPlayer = snap.currentPlayer;
+      b.gameOver = snap.gameOver;
+      rows.push({
+        ply: i + 1,
+        move: log.move,
+        board: b,
+        cells: snap.cells.slice()
+      });
+    }
+    return rows;
+  }
+
+  function setReviewProgress(done, total) {
+    var wrap = document.getElementById('review-progress');
+    var bar = document.getElementById('review-bar');
+    var text = document.getElementById('review-progress-text');
+    if (!wrap || !bar || !text) return;
+    wrap.hidden = false;
+    bar.style.width = (total > 0 ? Math.round((done / total) * 100) : 0) + '%';
+    text.textContent = done >= total
+      ? '复盘完成'
+      : '正在复盘 ' + done + '/' + total + ' 手…';
+  }
+
+  function openReview() {
+    if (!state.gameOver || !state.coach.enabled || !coach) return;
+    state.reviewOpen = true;
+    state.reviewEpoch++;
+    var epoch = state.reviewEpoch;
+    var modal = document.getElementById('review');
+    modal.hidden = false;
+    document.getElementById('review-close').focus();
+
+    if (state.coach.review) {
+      renderReview(state.coach.review);
+      return;
+    }
+
+    document.getElementById('review-summary').textContent = '正在复盘…';
+    document.getElementById('review-list').textContent = '';
+    document.getElementById('review-board-wrap').hidden = true;
+    buildReview(epoch).catch(function (err) {
+      if (epoch !== state.reviewEpoch) return;
+      console.error('review failed', err);
+      document.getElementById('review-summary').textContent = '复盘失败，请重试。';
+      document.getElementById('review-progress').hidden = true;
+    });
+  }
+
+  async function buildReview(epoch) {
+    var rows = reviewRows();
+    if (!rows.length) {
+      document.getElementById('review-summary').textContent = '这局没有可复盘的人类走法。';
+      document.getElementById('review-progress').hidden = true;
+      return;
+    }
+
+    var results = [];
+    for (var k = 0; k < rows.length; k++) {
+      if (epoch !== state.reviewEpoch) return;
+      setReviewProgress(k, rows.length);
+      var res = await coach.analyze(rows[k].board, BLACK, {
+        sims: 160,
+        shouldAbort: function () { return epoch !== state.reviewEpoch; }
+      });
+      if (epoch !== state.reviewEpoch) return;
+      if (!res || res.move === null) continue;
+
+      var judged = coach.judge(res, rows[k].move);
+      if (!judged) continue;
+      var ex = coach.explain(rows[k].board, rows[k].move, judged.loss);
+      results.push({
+        ply: rows[k].ply,
+        move: rows[k].move,
+        cells: rows[k].cells,
+        loss: judged.loss,
+        best: judged.best.move,
+        label: judged.label,
+        reason: ex.reason
+      });
+    }
+
+    setReviewProgress(rows.length, rows.length);
+
+    var sorted = results.slice().sort(function (a, b) { return b.loss - a.loss; });
+    var mistakes = sorted.filter(function (r) { return r.loss >= 0.10; });
+    var items = sorted.slice(0, 5);
+
+    var maxLoss = results.reduce(function (m, r) { return Math.max(m, r.loss); }, 0);
+    var summary;
+    if (!mistakes.length) {
+      summary = '本局没有明显失误（最大损失 ' + maxLoss.toFixed(2) + '）；下面是最接近的几手。';
+    } else {
+      summary = '本局 ' + mistakes.length + ' 处明显失误，最大损失 ' +
+        mistakes[0].loss.toFixed(2) + '。点击查看局面。';
+    }
+
+    state.coach.review = { items: items, all: results, summary: summary };
+    renderReview(state.coach.review);
+  }
+
+  function renderReview(review) {
+    document.getElementById('review-summary').textContent = review.summary;
+    document.getElementById('review-progress').hidden = true;
+
+    var list = document.getElementById('review-list');
+    list.textContent = '';
+    var detail = document.getElementById('review-detail');
+    detail.textContent = '';
+
+    if (!review.items.length) {
+      var empty = document.createElement('li');
+      empty.className = 'review-empty';
+      empty.textContent = '没有明显失误';
+      list.appendChild(empty);
+      document.getElementById('review-board-wrap').hidden = true;
+      return;
+    }
+
+    for (var i = 0; i < review.items.length; i++) {
+      (function (item, idx) {
+        var li = document.createElement('li');
+        li.dataset.index = String(idx);
+
+        var ply = document.createElement('span');
+        ply.className = 'rv-ply';
+        ply.textContent = '第 ' + item.ply + ' 手';
+
+        var mv = document.createElement('span');
+        mv.className = 'rv-move';
+        mv.textContent = coachMoveName(item.move);
+
+        var loss = document.createElement('span');
+        loss.className = 'rv-loss';
+        loss.textContent = '亏 ' + item.loss.toFixed(2);
+
+        var best = document.createElement('span');
+        best.className = 'rv-best';
+        best.textContent = '最佳 ' + coachMoveName(item.best);
+
+        li.appendChild(ply);
+        li.appendChild(mv);
+        li.appendChild(loss);
+        li.appendChild(best);
+        li.addEventListener('click', function () {
+          selectReviewItem(item, li);
+        });
+        list.appendChild(li);
+      })(review.items[i], i);
+    }
+
+    var first = list.firstElementChild;
+    if (first) selectReviewItem(review.items[0], first);
+  }
+
+  function selectReviewItem(item, li) {
+    var all = document.querySelectorAll('#review-list li');
+    for (var i = 0; i < all.length; i++) all[i].classList.remove('is-active');
+    if (li) li.classList.add('is-active');
+
+    var wrap = document.getElementById('review-board-wrap');
+    wrap.hidden = false;
+    drawReviewBoard(document.getElementById('review-board'), item.cells, item.move, item.best);
+
+    document.getElementById('review-detail').textContent =
+      '第 ' + item.ply + ' 手 ' + coachMoveName(item.move) + '：' +
+      item.label + '，亏 ' + item.loss.toFixed(2) + '。最佳 ' +
+      coachMoveName(item.best) + '（' + item.reason + '）。';
+  }
+
+  function drawReviewBoard(canvas, cells, actual, best) {
+    var c = canvas.getContext('2d');
+    var n = 8;
+    var cell = canvas.width / n;
+    var r, col;
+    for (r = 0; r < n; r++) {
+      for (col = 0; col < n; col++) {
+        c.fillStyle = (r + col) % 2 === 0 ? '#2f7a5c' : '#256b4f';
+        c.fillRect(col * cell, r * cell, cell, cell);
+        c.strokeStyle = 'rgba(10, 16, 26, 0.35)';
+        c.lineWidth = 1;
+        c.strokeRect(col * cell + 0.5, r * cell + 0.5, cell, cell);
+      }
+    }
+
+    for (var i = 0; i < 64; i++) {
+      var piece = cells[i];
+      if (!piece) continue;
+      var cx = (i & 7) * cell + cell / 2;
+      var cy = (i >> 3) * cell + cell / 2;
+      c.beginPath();
+      c.arc(cx, cy, cell * 0.36, 0, Math.PI * 2);
+      c.fillStyle = piece === 1 ? '#171b22' : '#eef2f6';
+      c.fill();
+      c.strokeStyle = piece === 1 ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.18)';
+      c.lineWidth = 1;
+      c.stroke();
+    }
+
+    if (best !== null && best !== undefined) {
+      var bx = (best & 7) * cell + cell / 2;
+      var by = (best >> 3) * cell + cell / 2;
+      c.save();
+      c.strokeStyle = 'rgba(242,196,92,0.85)';
+      c.lineWidth = 2;
+      c.setLineDash([5, 4]);
+      c.beginPath();
+      c.arc(bx, by, cell * 0.42, 0, Math.PI * 2);
+      c.stroke();
+      c.restore();
+    }
+
+    var ax = (actual & 7) * cell + cell / 2;
+    var ay = (actual >> 3) * cell + cell / 2;
+    c.beginPath();
+    c.strokeStyle = '#ff8a7a';
+    c.lineWidth = 2.5;
+    c.arc(ax, ay, cell * 0.3, 0, Math.PI * 2);
+    c.stroke();
+  }
+
+  function closeReview() {
+    state.reviewOpen = false;
+    state.reviewEpoch++;
+    var modal = document.getElementById('review');
+    if (modal) modal.hidden = true;
+    var btn = document.getElementById('btn-review');
+    if (btn && !btn.hidden) btn.focus();
+    if (state.coach.enabled) updateCoachPanel();
   }
 
   function findAnim(idx) {
@@ -687,6 +937,8 @@
 
   function applyMove(idx) {
     var before = state.board.cells.slice();
+    var mover = state.board.currentPlayer;
+    state.moveLog.push({ move: idx, player: mover });
     state.board.stepIndex(idx);
 
     var anims = [];
@@ -1007,6 +1259,8 @@
     state.board.currentPlayer = snap.currentPlayer;
     state.board.gameOver = snap.gameOver;
     state.snapshots.length = target;
+    state.moveLog.length = target;
+    state.coach.review = null;
 
     state.gameOver = false;
     state.lastMove = -1;
@@ -1036,6 +1290,12 @@
     }
     state.board.reset();
     state.snapshots = [];
+    state.moveLog = [];
+    state.reviewOpen = false;
+    state.reviewEpoch++;
+    var reviewModal = document.getElementById('review');
+    if (reviewModal) reviewModal.hidden = true;
+    state.coach.review = null;
     state.thinking = false;
     state.gameOver = false;
     state.recorded = false;
@@ -1286,6 +1546,16 @@
       if (e.target === e.currentTarget) hideRules();
     });
     document.addEventListener('keydown', function (e) {
+      if (state.reviewOpen) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeReview();
+        } else if (e.key === 'Tab') {
+          e.preventDefault();
+          document.getElementById('review-close').focus();
+        }
+        return;
+      }
       if (state.recordsOpen) {
         if (e.key === 'Escape') {
           e.preventDefault();
@@ -1341,6 +1611,15 @@
         showHint();
       });
     }
+
+    var reviewBtn = document.getElementById('btn-review');
+    if (reviewBtn) reviewBtn.addEventListener('click', openReview);
+
+    document.getElementById('review-close').addEventListener('click', closeReview);
+    document.getElementById('review-close-btn').addEventListener('click', closeReview);
+    document.getElementById('review').addEventListener('click', function (e) {
+      if (e.target === e.currentTarget) closeReview();
+    });
   }
 
   function render() {
