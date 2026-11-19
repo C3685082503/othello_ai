@@ -62,6 +62,16 @@
 
         <p id="status" role="status" aria-live="polite"></p>
 
+        <section class="coach-panel" id="coach-panel" hidden>
+            <div class="coach-line">
+                <span class="coach-badge">教练</span>
+                <span id="coach-text">打开后，AI 只分析、不下场。</span>
+            </div>
+            <div class="coach-actions">
+                <button class="btn ghost coach-btn" id="btn-hint" type="button" disabled>提示</button>
+            </div>
+        </section>
+
         <section class="difficulty" aria-label="难度">
             <span class="difficulty-label">思考强度</span>
             <div class="chips" id="difficulty-chips">
@@ -70,6 +80,7 @@
                 <button class="chip" data-sims="320" type="button">认真</button>
             </div>
             <button class="chip chip-toggle" id="toggle-candidates" type="button" aria-pressed="false">AI 思路</button>
+            <button class="chip chip-toggle" id="toggle-coach" type="button" aria-pressed="false">教练</button>
             <span class="depth-note" id="depth-note">160 次模拟 / 步</span>
         </section>
 
@@ -158,6 +169,7 @@
     <script src="endgame.js"></script>
     <script src="net.js"></script>
     <script src="mcts.js"></script>
+    <script src="coach.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

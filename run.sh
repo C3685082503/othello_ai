@@ -32,7 +32,7 @@ case "${1:-}" in
   web)          "$PY" -m uvicorn src.web.server:app --host 127.0.0.1 --port 8000 ;;
   web-static)   "$PY" -m http.server 8765 --directory web ;;
   offline)      "$NODE" tools/build_single.mjs ;;
-  js-test)      "$NODE" --test tests/js/engine.test.mjs tests/js/net.test.mjs tests/js/mcts.test.mjs tests/js/endgame.test.mjs tests/js/openings.test.mjs tests/js/e2e.test.mjs ;;
+  js-test)      "$NODE" --test tests/js/engine.test.mjs tests/js/net.test.mjs tests/js/mcts.test.mjs tests/js/endgame.test.mjs tests/js/openings.test.mjs tests/js/coach.test.mjs tests/js/e2e.test.mjs ;;
   export-web)   "$PY" -m src.scripts.export_web_weights ;;
   selfplay)     "$PY" -m src.alphazero.self_play ;;
   train)        "$PY" -m src.alphazero.evolution ;;

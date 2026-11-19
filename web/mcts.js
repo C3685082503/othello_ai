@@ -194,7 +194,8 @@
       out.push({
         move: sorted[i].move,
         visits: sorted[i].N,
-        share: sum > 0 ? sorted[i].N / sum : 0
+        share: sum > 0 ? sorted[i].N / sum : 0,
+        q: -sorted[i].Q
       });
     }
     return out;
@@ -215,7 +216,7 @@
 
     var legal = board.legalMoves(player);
     if (legal.length === 0) {
-      return { move: null, visits: 0, value: 0, sims: 0, elapsedMs: 0, root: null, reachedEnd: true, reused: false };
+      return { move: null, visits: 0, value: 0, sims: 0, elapsedMs: 0, root: null, reachedEnd: true, reused: false, moveValues: [] };
     }
 
     // 树复用：上一步的树里若存在当前局面，直接把它作为新根，
@@ -286,6 +287,10 @@
 
     var best = bestChild(root);
     this.cacheRoot = root;
+    // 根节点所有合法手的 Q，统一成根玩家视角（child.Q 是子节点视角）。
+    var moveValues = root.children.map(function (c) {
+      return { move: c.move, q: -c.Q, visits: c.N };
+    });
     return {
       move: best ? best.move : legal[0],
       visits: best ? best.N : 0,
@@ -295,7 +300,8 @@
       root: root,
       reachedEnd: done >= sims,
       reused: reused,
-      candidates: topChildren(root, 3)
+      candidates: topChildren(root, 3),
+      moveValues: moveValues
     };
   };
 

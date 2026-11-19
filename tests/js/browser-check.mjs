@@ -565,6 +565,121 @@ async function main() {
     await evaluate('window.__OTHELLO__.newGame()', false);
     await sleep(200);
 
+    // 7.2 教练：预分析、提示、落子点评、375px
+    await evaluate("document.getElementById('toggle-coach').click()", false);
+    await sleep(1500);
+    const coachReady = await evaluate(
+      `(() => {
+        const c = window.__OTHELLO__.state.coach;
+        return {
+          on: c.enabled,
+          busy: c.busy,
+          has: !!c.analysis,
+          autoHint: !!c.hint,
+          hintDisabled: document.getElementById('btn-hint').disabled,
+          panel: !document.getElementById('coach-panel').hidden
+        };
+      })()`,
+      false
+    );
+    record(
+      '教练预分析完成且不自动剧透',
+      coachReady.on && !coachReady.busy && coachReady.has &&
+        coachReady.autoHint === false && coachReady.hintDisabled === false && coachReady.panel,
+      JSON.stringify(coachReady)
+    );
+
+    await evaluate("document.getElementById('btn-hint').click()", false);
+    await sleep(150);
+    const hint = await evaluate(
+      `(() => {
+        const c = window.__OTHELLO__.state.coach;
+        return { n: c.hint ? c.hint.moves.length : 0, text: document.getElementById('coach-text').textContent };
+      })()`,
+      false
+    );
+    record('教练提示 3 个候选', hint.n === 3, JSON.stringify(hint));
+
+    const coachMove = await evaluate('window.__OTHELLO__.board().legalMoves(1)[0]', false);
+    await evaluate(`window.__OTHELLO__.playHuman(${coachMove})`, false);
+    await sleep(300);
+    const coachFb = await evaluate(
+      `(() => {
+        const c = window.__OTHELLO__.state.coach;
+        return {
+          quality: c.feedback ? c.feedback.quality : '',
+          text: document.getElementById('coach-text').textContent
+        };
+      })()`,
+      false
+    );
+    record(
+      '落子后出现教练点评',
+      coachFb.quality === 'full' && /这手|快速评估|失误|略亏|好棋/.test(coachFb.text),
+      JSON.stringify(coachFb)
+    );
+
+    await waitUntil("window.__OTHELLO__.state.thinking === true", '教练测试 AI 开始', 10000);
+    await waitUntil("window.__OTHELLO__.state.thinking === false", '教练测试 AI 完成', 60000);
+
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: 375,
+      height: 812,
+      deviceScaleFactor: 2,
+      mobile: true
+    });
+    await sleep(250);
+    const coachNarrow = await evaluate(
+      '(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }))()',
+      false
+    );
+    record(
+      '375px 教练面板无横向溢出',
+      coachNarrow.sw <= coachNarrow.iw + 1,
+      JSON.stringify(coachNarrow)
+    );
+    const shotCoach = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    writeFileSync(join(root, 'docs', 'coach.png'), Buffer.from(shotCoach.data, 'base64'));
+    await cdp.send('Emulation.clearDeviceMetricsOverride');
+    await sleep(200);
+
+    await evaluate("document.getElementById('toggle-coach').click()", false);
+    await sleep(150);
+    const coachOff = await evaluate(
+      "(() => ({ on: window.__OTHELLO__.state.coach.enabled, hidden: document.getElementById('coach-panel').hidden }))()",
+      false
+    );
+    record('教练可关闭', coachOff.on === false && coachOff.hidden === true, JSON.stringify(coachOff));
+
+    await evaluate('window.__OTHELLO__.newGame()', false);
+    await sleep(200);
+
+    // 7.3 快速落子：预分析没跑完时应降级为「快速评估」，不能卡住
+    await evaluate("document.getElementById('toggle-coach').click()", false);
+    const fastMove = await evaluate('window.__OTHELLO__.board().legalMoves(1)[0]', false);
+    await evaluate(`window.__OTHELLO__.playHuman(${fastMove})`, false);
+    await sleep(200);
+    const fastFb = await evaluate(
+      `(() => {
+        const c = window.__OTHELLO__.state.coach;
+        return { quality: c.feedback ? c.feedback.quality : '', text: document.getElementById('coach-text').textContent };
+      })()`,
+      false
+    );
+    record(
+      '快速落子降级为快速评估',
+      fastFb.quality === 'quick' && /快速评估/.test(fastFb.text),
+      JSON.stringify(fastFb)
+    );
+
+    await waitUntil("window.__OTHELLO__.state.thinking === true", '快速测试 AI 开始', 10000);
+    await waitUntil("window.__OTHELLO__.state.thinking === false", '快速测试 AI 完成', 60000);
+
+    await evaluate("document.getElementById('toggle-coach').click()", false);
+    await sleep(100);
+    await evaluate('window.__OTHELLO__.newGame()', false);
+    await sleep(200);
+
     // 8. 无 JS 异常
     await sleep(500);
     record('无 JS 异常', cdp.errors.length === 0, cdp.errors.join(' | ') || 'clean');

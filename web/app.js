@@ -22,6 +22,7 @@
   // 空位 ≤ 11 时改用 alpha-beta 精确求解（本机 10 格 7–36ms，11 格 29–115ms）
   var ENDGAME_EMPTIES = 11;
   var solver = window.OthelloEndgame || null;
+  var coachApi = window.OthelloCoach || null;
 
   // 战绩：只保留最近 30 局，存在 localStorage
   var RECORDS_KEY = 'othello.records.v1';
@@ -32,6 +33,7 @@
 
   var net = null;
   var mcts = null;
+  var coach = null;
 
   var state = {
     board: new engine.Board(),
@@ -59,7 +61,18 @@
     thinkingShown: false,
     thinkingTotal: 0,
     showCandidates: false,
-    candidates: []
+    candidates: [],
+    coach: {
+      enabled: false,
+      sims: 96,
+      busy: false,
+      epoch: 0,
+      analysis: null,
+      analysisKey: '',
+      hint: null,
+      feedback: null,
+      history: []
+    }
   };
 
   // ---------- 绘制 ----------
@@ -151,6 +164,258 @@
 
   function easeOutCubic(t) {
     return 1 - Math.pow(1 - t, 3);
+  }
+
+  // ---------- 教练 ----------
+
+  function coachMoveName(idx) {
+    if (idx === null || idx === undefined || idx < 0) return '—';
+    return coachApi ? coachApi.moveName(idx) : String(idx);
+  }
+
+  function updateCoachPanel() {
+    var panel = document.getElementById('coach-panel');
+    if (!panel) return;
+    if (!state.coach.enabled) {
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+
+    var text = document.getElementById('coach-text');
+    var hintBtn = document.getElementById('btn-hint');
+    var c = state.coach;
+    if (hintBtn) hintBtn.disabled = !(humanTurn() && !c.busy);
+
+    if (c.feedback && c.feedback.text) {
+      text.textContent = c.feedback.text;
+    } else if (c.hint && c.hint.moves && c.hint.moves.length) {
+      var parts = [];
+      for (var i = 0; i < c.hint.moves.length; i++) {
+        parts.push((i + 1) + ' ' + coachMoveName(c.hint.moves[i].move));
+      }
+      text.textContent = '提示：' + parts.join(' · ');
+    } else if (c.busy) {
+      text.textContent = '正在分析当前局面…';
+    } else if (humanTurn()) {
+      text.textContent = '轮到你，可点「提示」看前 3 个候选。';
+    } else if (state.thinking) {
+      text.textContent = 'AI 思考中，等它落子后我再分析。';
+    } else {
+      text.textContent = '等轮到你时，我会先看当前局面。';
+    }
+  }
+
+  function cancelCoach() {
+    state.coach.epoch++;
+    state.coach.busy = false;
+    state.coach.analysis = null;
+    state.coach.analysisKey = '';
+    state.coach.hint = null;
+  }
+
+  function setCoach(on) {
+    if (!coachApi || !coach) return;
+    state.coach.enabled = !!on;
+    var btn = document.getElementById('toggle-coach');
+    if (btn) {
+      btn.classList.toggle('is-on', state.coach.enabled);
+      btn.setAttribute('aria-pressed', String(state.coach.enabled));
+    }
+    if (!state.coach.enabled) {
+      cancelCoach();
+      state.coach.feedback = null;
+      updateCoachPanel();
+      scheduleDraw();
+      return;
+    }
+    state.coach.feedback = null;
+    state.coach.hint = null;
+    updateCoachPanel();
+    scheduleCoach();
+    scheduleDraw();
+  }
+
+  function scheduleCoach() {
+    if (!coachApi || !coach || !state.coach.enabled) return;
+    if (!humanTurn() || state.coach.busy) return;
+
+    var key = coachApi.boardKey(state.board);
+    if (state.coach.analysis && state.coach.analysisKey === key) return;
+
+    var board = state.board.clone();
+    var epoch = ++state.coach.epoch;
+    state.coach.busy = true;
+    state.coach.analysis = null;
+    state.coach.analysisKey = '';
+    state.coach.hint = null;
+    state.coach.feedback = null;
+    updateCoachPanel();
+
+    coach.analyze(board, BLACK, {
+      sims: state.coach.sims,
+      shouldAbort: function () { return epoch !== state.coach.epoch; }
+    }).then(function (res) {
+      if (epoch !== state.coach.epoch) return;
+      state.coach.busy = false;
+      if (!res || res.move === null) { updateCoachPanel(); return; }
+      if (coachApi.boardKey(state.board) !== key) { updateCoachPanel(); return; }
+      state.coach.analysis = res;
+      state.coach.analysisKey = key;
+      updateCoachPanel();
+      scheduleDraw();
+    }).catch(function (err) {
+      if (epoch !== state.coach.epoch) return;
+      state.coach.busy = false;
+      updateCoachPanel();
+      console.error('coach analyze failed', err);
+    });
+  }
+
+  async function showHint() {
+    if (!coachApi || !coach || !state.coach.enabled || !humanTurn() || state.coach.busy) return;
+
+    var key = coachApi.boardKey(state.board);
+    if (!state.coach.analysis || state.coach.analysisKey !== key) {
+      var board = state.board.clone();
+      var epoch = ++state.coach.epoch;
+      state.coach.busy = true;
+      updateCoachPanel();
+      try {
+        var res = await coach.analyze(board, BLACK, {
+          sims: state.coach.sims,
+          shouldAbort: function () { return epoch !== state.coach.epoch; }
+        });
+        if (epoch !== state.coach.epoch) return;
+        if (!res || res.move === null) return;
+        if (coachApi.boardKey(state.board) !== key) return;
+        state.coach.analysis = res;
+        state.coach.analysisKey = key;
+      } finally {
+        if (epoch === state.coach.epoch) state.coach.busy = false;
+      }
+    }
+
+    var all = state.coach.analysis.moveValues.slice();
+    var stable = all.filter(function (m) { return m.visits >= 5; })
+      .sort(function (a, b) { return b.q - a.q; });
+    var rest = all.filter(function (m) { return m.visits < 5; })
+      .sort(function (a, b) { return b.visits - a.visits; });
+    state.coach.hint = { moves: stable.concat(rest).slice(0, 3) };
+    state.coach.feedback = null;
+    updateCoachPanel();
+    render();
+  }
+
+  function coachFeedback(before, move, analysis) {
+    if (!coachApi || !coach || !state.coach.enabled) return;
+
+    var fb = null;
+    if (analysis && analysis.moveValues && analysis.moveValues.length) {
+      var judged = coach.judge(analysis, move);
+      if (judged) {
+        var ex = coach.explain(before, move, judged.loss);
+        var bestName = coachMoveName(judged.best.move);
+        var text;
+        if (judged.label === '好棋' || judged.label === '更优') {
+          text = '这手' + judged.label + '。';
+        } else {
+          text = judged.label + ' ' + Math.abs(judged.loss).toFixed(2) +
+            '。更好的是 ' + bestName + '（' + ex.reason + '）';
+        }
+        fb = {
+          quality: 'full',
+          label: judged.label,
+          loss: judged.loss,
+          bestMove: judged.best.move,
+          actualMove: move,
+          reason: ex.reason,
+          text: text
+        };
+      }
+    }
+
+    if (!fb) {
+      var q = coach.quick(before, BLACK, move);
+      var d = q.delta;
+      fb = {
+        quality: 'quick',
+        delta: d,
+        bestMove: q.bestMove,
+        actualMove: move,
+        text: '快速评估：估值' + (d >= 0 ? '下降 ' : '上升 ') +
+          Math.abs(d).toFixed(2) + '；参考 ' + coachMoveName(q.bestMove) + '。'
+      };
+    }
+
+    fb.boardKey = coachApi.boardKey(state.board);
+    state.coach.feedback = fb;
+    state.coach.hint = null;
+    state.coach.busy = false;
+    state.coach.history.push({
+      move: move,
+      quality: fb.quality,
+      label: fb.label || '',
+      loss: fb.loss || 0,
+      bestMove: fb.bestMove,
+      reason: fb.reason || '',
+      boardKey: fb.boardKey
+    });
+    updateCoachPanel();
+    scheduleDraw();
+  }
+
+  function drawCoachOverlay() {
+    if (!coachApi) return;
+
+    if (state.coach.hint && state.coach.hint.moves) {
+      for (var i = 0; i < state.coach.hint.moves.length; i++) {
+        var mv = state.coach.hint.moves[i].move;
+        var cx = (mv & 7) * CELL + CELL / 2;
+        var cy = (mv >> 3) * CELL + CELL / 2;
+        ctx.save();
+        ctx.strokeStyle = i === 0 ? 'rgba(242,196,92,0.95)' : 'rgba(242,196,92,0.55)';
+        ctx.lineWidth = i === 0 ? 3 : 2;
+        if (i > 0) ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.arc(cx, cy, CELL * 0.44, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = i === 0 ? 'rgba(242,196,92,0.95)' : 'rgba(242,196,92,0.65)';
+        ctx.font = 'bold 11px system-ui, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText(String(i + 1), cx - CELL * 0.36, cy - CELL * 0.34);
+      }
+      ctx.textAlign = 'start';
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    var fb = state.coach.feedback;
+    if (!fb || fb.boardKey !== coachApi.boardKey(state.board)) return;
+
+    if (fb.bestMove !== undefined && fb.bestMove !== null) {
+      var bx = (fb.bestMove & 7) * CELL + CELL / 2;
+      var by = (fb.bestMove >> 3) * CELL + CELL / 2;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(242,196,92,0.75)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.arc(bx, by, CELL * 0.44, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    var ax = (fb.actualMove & 7) * CELL + CELL / 2;
+    var ay = (fb.actualMove >> 3) * CELL + CELL / 2;
+    var color = fb.label === '失误' ? '#ff6b5a' :
+      (fb.label === '略亏' ? '#f2c45c' : '#63d29a');
+    ctx.beginPath();
+    ctx.arc(ax + CELL * 0.3, ay - CELL * 0.3, 4, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
   }
 
   function findAnim(idx) {
@@ -276,6 +541,8 @@
       ctx.fill();
     }
 
+    if (state.coach.enabled) drawCoachOverlay();
+
     // 键盘光标
     if (state.kbFocus && humanTurn()) {
       var kx = (state.kbCursor & 7) * CELL;
@@ -334,6 +601,7 @@
       state.animating = false;
       // 动画结束后补一帧：此时 humanTurn 恢复，合法落点提示才会出现
       drawBoard();
+      if (state.coach.enabled) scheduleCoach();
     }
   }
 
@@ -471,8 +739,17 @@
     if (!humanTurn()) return;
     if (state.board.legalMoves(BLACK).indexOf(idx) < 0) return;
 
+    // 先留下落子前的棋盘；如果预分析已完成，就用它的 Q 直接点评
+    var before = state.board.clone();
+    var analysis = (coachApi && state.coach.analysis &&
+      state.coach.analysisKey === coachApi.boardKey(state.board)) ? state.coach.analysis : null;
+
+    if (state.coach.enabled) cancelCoach();
+
     snapshot(BLACK);
     applyMove(idx);
+
+    if (state.coach.enabled) coachFeedback(before, idx, analysis);
 
     if (state.gameOver) return;
     // 先让翻子动画播完，再开始 AI 搜索；否则推理会阻塞主线程，动画掉帧
@@ -552,12 +829,15 @@
 
       if (result.move === null || result.move === undefined) {
         render();
+        if (state.coach.enabled) scheduleCoach();
         return;
       }
 
       snapshot(player);
       applyMove(result.move);
     }
+
+    if (state.coach.enabled) scheduleCoach();
   }
 
   // ---------- 战绩 ----------
@@ -733,14 +1013,27 @@
     state.anims = [];
     state.animating = false;
     state.lastSearch = null;
+    if (coach) {
+      cancelCoach();
+      state.coach.feedback = null;
+      state.coach.hint = null;
+      state.coach.history = [];
+    }
     if (mcts) mcts.resetCache();
     state.blackRate = evaluateBlackRate();
     document.getElementById('status').textContent = '';
     render();
+    if (state.coach.enabled) scheduleCoach();
   }
 
   function newGame() {
     state.epoch++;
+    if (coach) {
+      cancelCoach();
+      state.coach.feedback = null;
+      state.coach.hint = null;
+      state.coach.history = [];
+    }
     state.board.reset();
     state.snapshots = [];
     state.thinking = false;
@@ -758,6 +1051,7 @@
     document.getElementById('status').textContent = '';
     state.blackRate = evaluateBlackRate();
     render();
+    if (state.coach.enabled) scheduleCoach();
   }
 
   // ---------- 思考反馈（不遮棋盘） ----------
@@ -1033,11 +1327,26 @@
         scheduleDraw();
       });
     }
+
+    var coachToggle = document.getElementById('toggle-coach');
+    if (coachToggle) {
+      coachToggle.addEventListener('click', function () {
+        setCoach(!state.coach.enabled);
+      });
+    }
+
+    var hintBtn = document.getElementById('btn-hint');
+    if (hintBtn) {
+      hintBtn.addEventListener('click', function () {
+        showHint();
+      });
+    }
   }
 
   function render() {
     updateDom();
     drawBoard();
+    if (state.coach.enabled) updateCoachPanel();
   }
 
   // ---------- 启动 ----------
@@ -1079,6 +1388,12 @@
     }
 
     mcts = new mctsApi.MCTS(net, { cPuct: 1.5 });
+    if (coachApi) {
+      coach = new coachApi.Coach(net, { sims: state.coach.sims });
+    } else {
+      var coachToggle = document.getElementById('toggle-coach');
+      if (coachToggle) coachToggle.hidden = true;
+    }
 
     document.getElementById('model-info').textContent =
       net.paramCount().toLocaleString() + ' 参数 · 本地推理 · ' +
@@ -1101,7 +1416,9 @@
     undo: undo,
     render: render,
     records: function () { return state.records.slice(); },
-    recordResult: recordResult
+    recordResult: recordResult,
+    get coach() { return coach; },
+    coachState: state.coach
   };
 
   if (document.readyState === 'loading') {
