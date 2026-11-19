@@ -42,8 +42,11 @@ test('树复用：走完一手再轮到我方时能命中旧树', async () => {
   assert.equal(second.candidates.length, 3, '应当给出前 3 个候选');
   const shares = second.candidates.map((c) => c.share);
   assert.ok(shares[0] >= shares[1] && shares[1] >= shares[2], '候选应按访问占比降序');
+  assert.ok(shares.every((s) => s >= 0 && s <= 1), '每个候选占比应在 0~1');
   const sum = shares.reduce((a, b) => a + b, 0);
-  assert.ok(Math.abs(sum - 1) < 0.05, `候选占比之和应接近 1，实际 ${sum}`);
+  // share 是占根节点总访问量的比例；根节点可能有 3 个以上子节点，
+  // 因此前 3 名之和只需要不超过 1，不要求等于 1。
+  assert.ok(sum > 0 && sum <= 1 + 1e-9, `候选占比之和应不超过 1，实际 ${sum}`);
 });
 
 test('树复用：局面不匹配时自动退回新建', async () => {
