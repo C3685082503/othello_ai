@@ -567,7 +567,11 @@ async function main() {
 
     // 7.2 教练：预分析、提示、落子点评、375px
     await evaluate("document.getElementById('toggle-coach').click()", false);
-    await sleep(1500);
+    await waitUntil(
+      "window.__OTHELLO__.state.coach.analysis !== null && window.__OTHELLO__.state.coach.busy === false",
+      '教练预分析',
+      15000
+    );
     const coachReady = await evaluate(
       `(() => {
         const c = window.__OTHELLO__.state.coach;
@@ -577,7 +581,8 @@ async function main() {
           has: !!c.analysis,
           autoHint: !!c.hint,
           hintDisabled: document.getElementById('btn-hint').disabled,
-          panel: !document.getElementById('coach-panel').hidden
+          panel: !document.getElementById('coach-panel').hidden,
+          text: document.getElementById('coach-text').textContent
         };
       })()`,
       false
@@ -585,8 +590,36 @@ async function main() {
     record(
       '教练预分析完成且不自动剧透',
       coachReady.on && !coachReady.busy && coachReady.has &&
-        coachReady.autoHint === false && coachReady.hintDisabled === false && coachReady.panel,
+        coachReady.autoHint === false && coachReady.hintDisabled === false &&
+        coachReady.panel && /240/.test(coachReady.text),
       JSON.stringify(coachReady)
+    );
+
+    // 难度切到「认真」，教练预算应升到 480
+    await evaluate(
+      "document.querySelector('#difficulty-chips .chip[data-sims=\"320\"]').click()",
+      false
+    );
+    await waitUntil(
+      "window.__OTHELLO__.state.sims === 320 && window.__OTHELLO__.state.coach.analysis !== null && window.__OTHELLO__.state.coach.busy === false",
+      '教练 480 预分析',
+      20000
+    );
+    const coach480 = await evaluate(
+      "document.getElementById('coach-text').textContent",
+      false
+    );
+    record('认真难度教练预算升到 480', /480/.test(coach480), coach480);
+
+    // 切回标准，避免影响后续断言
+    await evaluate(
+      "document.querySelector('#difficulty-chips .chip[data-sims=\"160\"]').click()",
+      false
+    );
+    await waitUntil(
+      "window.__OTHELLO__.state.sims === 160 && window.__OTHELLO__.state.coach.analysis !== null && window.__OTHELLO__.state.coach.busy === false",
+      '教练 240 重新预分析',
+      20000
     );
 
     await evaluate("document.getElementById('btn-hint').click()", false);

@@ -67,7 +67,7 @@
     reviewEpoch: 0,
     coach: {
       enabled: false,
-      sims: 96,
+      sims: 160,
       busy: false,
       epoch: 0,
       analysis: null,
@@ -178,6 +178,11 @@
     return coachApi ? coachApi.moveName(idx) : String(idx);
   }
 
+  // 教练预算跟随难度：轻松 160 / 标准 240 / 认真 480
+  function coachSims() {
+    return Math.max(160, Math.round(state.sims * 1.5));
+  }
+
   function updateCoachPanel() {
     var panel = document.getElementById('coach-panel');
     if (!panel) return;
@@ -206,9 +211,9 @@
       }
       text.textContent = '提示：' + parts.join(' · ');
     } else if (c.busy) {
-      text.textContent = '正在分析当前局面…';
+      text.textContent = '正在分析当前局面（' + coachSims() + ' 次）…';
     } else if (humanTurn()) {
-      text.textContent = '轮到你，可点「提示」看前 3 个候选。';
+      text.textContent = '轮到你，可点「提示」（教练 ' + coachSims() + ' 次）。';
     } else if (state.thinking) {
       text.textContent = 'AI 思考中，等它落子后我再分析。';
     } else {
@@ -263,7 +268,7 @@
     updateCoachPanel();
 
     coach.analyze(board, BLACK, {
-      sims: state.coach.sims,
+      sims: coachSims(),
       shouldAbort: function () { return epoch !== state.coach.epoch; }
     }).then(function (res) {
       if (epoch !== state.coach.epoch) return;
@@ -293,7 +298,7 @@
       updateCoachPanel();
       try {
         var res = await coach.analyze(board, BLACK, {
-          sims: state.coach.sims,
+          sims: coachSims(),
           shouldAbort: function () { return epoch !== state.coach.epoch; }
         });
         if (epoch !== state.coach.epoch) return;
@@ -499,7 +504,7 @@
       if (epoch !== state.reviewEpoch) return;
       setReviewProgress(k, rows.length);
       var res = await coach.analyze(rows[k].board, BLACK, {
-        sims: 160,
+        sims: 320,
         shouldAbort: function () { return epoch !== state.reviewEpoch; }
       });
       if (epoch !== state.reviewEpoch) return;
@@ -1585,6 +1590,15 @@
         for (var j = 0; j < chips.length; j++) chips[j].classList.remove('is-active');
         el.classList.add('is-active');
         document.getElementById('depth-note').textContent = state.sims + ' 次模拟 / 步';
+
+        // 难度变了，教练预算也变；丢弃旧分析并重新预分析
+        if (state.coach.enabled) {
+          cancelCoach();
+          state.coach.feedback = null;
+          state.coach.review = null;
+          updateCoachPanel();
+          scheduleCoach();
+        }
       });
     }
 
