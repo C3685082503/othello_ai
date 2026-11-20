@@ -62,6 +62,8 @@
   /** 分析一个局面；player 必须是行棋方（人类执黑就传 -1） */
   Coach.prototype.analyze = function (board, player, opts) {
     opts = opts || {};
+    // 防御：局面和传入的行棋方不一致时，以棋盘为准，避免非法步
+    if (board.currentPlayer !== player) player = board.currentPlayer;
     return this.mcts.search(board, player, {
       sims: opts.sims || this.sims,
       reuse: false,

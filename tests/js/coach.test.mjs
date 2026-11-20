@@ -70,6 +70,14 @@ test('快速回退返回有限估值和参考手', () => {
   assert.ok(legal.includes(q.bestMove), '参考手必须合法');
 });
 
+test('传入错误行棋方时以棋盘为准', async () => {
+  const board = new Board();
+  const coach = new Coach(net, { sims: 8 });
+  const res = await coach.analyze(board, WHITE, { sims: 8 });
+  assert.ok(res.move !== null);
+  assert.ok(board.legalMoves(BLACK).includes(res.move), '应按黑方行棋');
+});
+
 test('boardKey 区分行棋方', () => {
   const board = new Board();
   assert.notEqual(boardKey(board), boardKey(Object.assign(board.clone(), { currentPlayer: WHITE })));

@@ -209,7 +209,7 @@
       for (var i = 0; i < c.hint.moves.length; i++) {
         parts.push((i + 1) + ' ' + coachMoveName(c.hint.moves[i].move));
       }
-      text.textContent = '提示：' + parts.join(' · ');
+      text.textContent = '提示（' + coachSims() + ' 次）：' + parts.join(' · ');
     } else if (c.busy) {
       text.textContent = '正在分析当前局面（' + coachSims() + ' 次）…';
     } else if (humanTurn()) {
