@@ -82,15 +82,6 @@ body {
     flex: 0 0 auto;
     align-self: flex-start;
     margin-top: 2px;
-    color: var(--accent);
-    border-color: rgba(242, 196, 92, 0.45);
-    background: rgba(242, 196, 92, 0.08);
-}
-
-.coach-top:hover {
-    color: var(--accent);
-    border-color: rgba(242, 196, 92, 0.75);
-    background: rgba(242, 196, 92, 0.14);
 }
 
 .brand {
@@ -553,6 +544,33 @@ body {
 .chip-toggle.is-on {
     color: var(--accent);
     background: rgba(242, 196, 92, 0.14);
+    box-shadow: inset 0 0 0 1px rgba(242, 196, 92, 0.55);
+}
+
+/* 页头教练：金色实心，和普通 chip 拉开层级 */
+.chip.coach-top {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    color: #201a08;
+    font-weight: 700;
+    background: linear-gradient(180deg, #f6cd6e, #e6b34a);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 4px 14px rgba(242, 196, 92, 0.25);
+}
+
+.chip.coach-top svg { width: 16px; height: 16px; }
+
+.chip.coach-top:hover {
+    color: #201a08;
+    background: linear-gradient(180deg, #ffd980, #e9b84e);
+}
+
+.chip.coach-top.is-on {
+    color: var(--accent);
+    background: rgba(242, 196, 92, 0.16);
+    border-color: var(--accent);
     box-shadow: inset 0 0 0 1px rgba(242, 196, 92, 0.55);
 }
 
