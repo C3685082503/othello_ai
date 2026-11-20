@@ -633,8 +633,14 @@ async function main() {
     );
     record('教练提示 3 个候选', hint.n === 3, JSON.stringify(hint));
 
-    const coachMove = await evaluate('window.__OTHELLO__.board().legalMoves(1)[0]', false);
-    await evaluate(`window.__OTHELLO__.playHuman(${coachMove})`, false);
+    const hintBtns = await evaluate(
+      "document.querySelectorAll('#coach-hints button').length",
+      false
+    );
+    record('提示候选可直接点选', hintBtns === 3, 'buttons=' + hintBtns);
+
+    // 故意点第 2 个候选，验证能主动换线，而不是只能照 1 号下
+    await evaluate("document.querySelectorAll('#coach-hints button')[1].click()", false);
     await sleep(300);
     const coachFb = await evaluate(
       `(() => {

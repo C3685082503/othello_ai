@@ -195,21 +195,37 @@
     var text = document.getElementById('coach-text');
     var hintBtn = document.getElementById('btn-hint');
     var reviewBtn = document.getElementById('btn-review');
+    var hintList = document.getElementById('coach-hints');
     var c = state.coach;
     if (hintBtn) hintBtn.disabled = !(humanTurn() && !c.busy);
     if (reviewBtn) {
       reviewBtn.hidden = !(state.gameOver && state.coach.enabled);
       reviewBtn.disabled = state.reviewOpen;
     }
+    if (hintList) {
+      hintList.hidden = true;
+      hintList.textContent = '';
+    }
 
     if (c.feedback && c.feedback.text) {
       text.textContent = c.feedback.text;
     } else if (c.hint && c.hint.moves && c.hint.moves.length) {
-      var parts = [];
-      for (var i = 0; i < c.hint.moves.length; i++) {
-        parts.push((i + 1) + ' ' + coachMoveName(c.hint.moves[i].move));
+      text.textContent = '提示（' + coachSims() + ' 次）：点候选直接下，或点棋盘。';
+      if (hintList) {
+        hintList.hidden = false;
+        for (var h = 0; h < c.hint.moves.length; h++) {
+          (function (item, idx) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'chip coach-hint-btn';
+            b.textContent = (idx + 1) + ' ' + coachMoveName(item.move);
+            b.addEventListener('click', function () {
+              playHuman(item.move);
+            });
+            hintList.appendChild(b);
+          })(c.hint.moves[h], h);
+        }
       }
-      text.textContent = '提示（' + coachSims() + ' 次）：' + parts.join(' · ');
     } else if (c.busy) {
       text.textContent = '正在分析当前局面（' + coachSims() + ' 次）…';
     } else if (humanTurn()) {
